@@ -3,6 +3,9 @@ import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { siteConfig, siteUrl } from "@/lib/site";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d);}catch(e){}})();`;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -51,18 +54,27 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <header className="border-b border-black/10 dark:border-white/10">
           <div className="mx-auto w-full max-w-3xl px-6 py-5 flex items-center justify-between">
             <Link href="/" className="font-semibold tracking-tight">
               {siteConfig.name}
             </Link>
-            <nav className="text-sm text-foreground/70">
+            <nav className="flex items-center gap-4 text-sm text-foreground/70">
               <Link href="/" className="hover:text-foreground transition-colors">
                 글 목록
               </Link>
+              <Link
+                href="/tags"
+                className="hover:text-foreground transition-colors"
+              >
+                태그
+              </Link>
+              <ThemeToggle />
             </nav>
           </div>
         </header>

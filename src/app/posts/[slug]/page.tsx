@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import rehypeHighlight from "rehype-highlight";
 import { getAllPostSlugs, getPostBySlug, formatDate } from "@/lib/posts";
+import { TagList } from "@/components/tag-list";
+import { Comments } from "@/components/comments";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -64,18 +66,9 @@ export default async function PostPage({ params }: PageProps) {
         </time>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{post.title}</h1>
         <p className="mt-3 text-foreground/70">{post.description}</p>
-        {post.tags && post.tags.length > 0 && (
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {post.tags.map((tag) => (
-              <li
-                key={tag}
-                className="rounded-full border border-black/10 px-3 py-0.5 text-xs text-foreground/60 dark:border-white/15"
-              >
-                #{tag}
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="mt-4">
+          <TagList tags={post.tags ?? []} />
+        </div>
       </header>
 
       <div className="prose prose-neutral dark:prose-invert max-w-none prose-pre:bg-[#0d1117] prose-pre:text-[#e6edf3]">
@@ -89,6 +82,8 @@ export default async function PostPage({ params }: PageProps) {
           }}
         />
       </div>
+
+      <Comments />
     </article>
   );
 }
