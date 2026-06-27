@@ -1,0 +1,94 @@
+---
+title: "모던 리액트 (3) — 배열 상태 관리와 useReducer"
+description: "불변성을 지키며 배열을 추가·수정·삭제하는 방법, useReducer로 복잡한 상태 관리하기, 그리고 React.memo 최적화를 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "react"
+tags: ["React", "useReducer", "불변성", "최적화"]
+---
+
+[(2) 상태와 Hooks 편](/posts/modern-react-hooks)에 이어, 실무에서 자주 만나는 배열 상태 관리와 `useReducer`를 정리합니다.
+
+## 불변성을 지키며 배열 다루기
+
+리액트는 상태가 **새로운 참조**로 바뀌어야 변화를 감지합니다. 따라서 배열을 직접 변경(`push`, `splice`)하지 않고, **새 배열을 만들어** 교체합니다.
+
+```jsx
+const [todos, setTodos] = useState([]);
+
+// 추가 — 스프레드로 새 배열
+const add = (todo) => setTodos((prev) => [...prev, todo]);
+
+// 삭제 — filter
+const remove = (id) => setTodos((prev) => prev.filter((t) => t.id !== id));
+
+// 수정 — map
+const toggle = (id) =>
+  setTodos((prev) =>
+    prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t))
+  );
+```
+
+> 핵심 공식: **추가 = 스프레드, 삭제 = filter, 수정 = map**. 셋 다 원본을 건드리지 않고 새 배열을 반환합니다.
+
+## useReducer — 복잡한 상태 관리
+
+상태 업데이트 로직이 복잡하거나 여러 갈래일 때, `useState` 대신 `useReducer`로 로직을 **reducer 함수 한 곳**에 모읍니다. (Redux와 같은 사상)
+
+```jsx
+import { useReducer } from "react";
+
+function reducer(state, action) {
+  switch (action.type) {
+    case "ADD":
+      return [...state, action.todo];
+    case "REMOVE":
+      return state.filter((t) => t.id !== action.id);
+    case "TOGGLE":
+      return state.map((t) =>
+        t.id === action.id ? { ...t, done: !t.done } : t
+      );
+    default:
+      return state;
+  }
+}
+
+function TodoApp() {
+  const [todos, dispatch] = useReducer(reducer, []);
+
+  return (
+    <button onClick={() => dispatch({ type: "ADD", todo: { id: 1, text: "할 일" } })}>
+      추가
+    </button>
+  );
+}
+```
+
+- **`state`**: 현재 상태
+- **`dispatch(action)`**: 액션을 보내 상태 변경을 요청
+- **`reducer(state, action)`**: 현재 상태와 액션으로 새 상태를 반환하는 순수 함수
+
+`useState`와 `useReducer` 중 어느 것을 쓸지는, 상태 변경이 **단순하면 useState**, **여러 종류로 복잡하면 useReducer**가 기준입니다.
+
+## React.memo — 리렌더링 최적화
+
+부모가 리렌더링되면 자식도 기본적으로 다시 렌더링됩니다. `React.memo`는 props가 바뀌지 않으면 자식 렌더링을 건너뜁니다.
+
+```jsx
+const TodoItem = React.memo(function TodoItem({ todo, onToggle }) {
+  console.log("render:", todo.id);
+  return <li onClick={() => onToggle(todo.id)}>{todo.text}</li>;
+});
+```
+
+이때 부모가 내려주는 `onToggle` 함수가 매 렌더마다 새로 만들어지면 `memo`가 무력화되므로, **`useCallback`** 으로 함수 참조를 고정합니다.
+
+```jsx
+const onToggle = useCallback((id) => dispatch({ type: "TOGGLE", id }), []);
+```
+
+> 불변성을 지키며 상태를 다루는 코드가 번거롭다면 **Immer**(`produce`)를 쓰면 "직접 변경"처럼 작성하면서도 불변성을 유지할 수 있습니다. (Redux Toolkit도 내부적으로 Immer를 사용합니다.)
+
+---
+
+리액트 상태 관리의 핵심은 **불변성**입니다. "원본을 바꾸지 말고 새로 만들어 교체한다"는 원칙만 지키면, useState든 useReducer든 예측 가능하게 동작합니다.

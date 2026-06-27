@@ -1,0 +1,124 @@
+---
+title: "모던 자바스크립트 Deep Dive 정리 (6) — DOM, 이벤트, 에러 처리"
+description: "DOM 선택·조작부터 이벤트 처리와 위임, 버블링/캡처링, 에러 처리(try/catch), 그리고 디바운스·스로틀까지 브라우저 환경의 자바스크립트를 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "javascript"
+tags: ["JavaScript", "DOM", "이벤트", "에러 처리"]
+---
+
+[(5) ES6+ 편](/posts/js-deep-dive-es6-class)에 이어, 브라우저에서 자바스크립트가 화면·이벤트를 다루는 방식을 정리합니다.
+
+## DOM 선택과 조작
+
+```javascript
+// 선택
+const el = document.querySelector(".title"); // 첫 일치
+const items = document.querySelectorAll("li"); // NodeList
+
+// 조작
+el.textContent = "안녕"; // 텍스트
+el.classList.add("active"); // 클래스
+el.classList.toggle("open");
+el.setAttribute("data-id", "1");
+el.style.color = "red";
+
+// 생성·삽입
+const li = document.createElement("li");
+li.textContent = "새 항목";
+document.querySelector("ul").appendChild(li);
+```
+
+> `innerHTML`로 문자열을 직접 넣으면 **XSS 위험**이 있습니다. 사용자 입력을 넣을 때는 `textContent`를 쓰거나 escape 처리를 하세요.
+
+## 이벤트 처리
+
+```javascript
+button.addEventListener("click", (event) => {
+  console.log(event.target); // 이벤트가 발생한 요소
+  event.preventDefault(); // 기본 동작 막기 (예: 폼 제출, 링크 이동)
+});
+```
+
+### 버블링과 캡처링
+
+이벤트는 가장 깊은 요소에서 발생한 뒤 **상위로 전파(버블링)** 됩니다. (캡처링은 그 반대 방향)
+
+```javascript
+// 세 번째 인자 true → 캡처링 단계에서 처리
+parent.addEventListener("click", handler, true);
+event.stopPropagation(); // 전파 중단
+```
+
+### 이벤트 위임
+
+자식 각각에 핸들러를 다는 대신, **부모에 하나만** 달고 `event.target`으로 구분합니다. 동적으로 추가되는 요소에도 동작합니다.
+
+```javascript
+document.querySelector("ul").addEventListener("click", (e) => {
+  if (e.target.tagName === "LI") {
+    console.log("클릭된 항목:", e.target.textContent);
+  }
+});
+```
+
+## 에러 처리
+
+```javascript
+try {
+  const data = JSON.parse(input);
+} catch (err) {
+  console.error("파싱 실패:", err.message);
+} finally {
+  console.log("항상 실행");
+}
+
+// 직접 에러 던지기
+function withdraw(amount, balance) {
+  if (amount > balance) throw new Error("잔액 부족");
+  return balance - amount;
+}
+
+// 커스텀 에러
+class ValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+```
+
+## strict mode
+
+파일·함수 최상단에 `"use strict"`를 두면 더 엄격한 문법 검사를 적용합니다. (선언 없는 변수 할당 금지, 안전하지 않은 동작 차단 등) ES 모듈은 **기본적으로 strict mode**로 동작합니다.
+
+## 디바운스와 스로틀
+
+이벤트가 과도하게 발생할 때(스크롤, 입력, 리사이즈) 호출 빈도를 제어합니다.
+
+```javascript
+// 디바운스: 마지막 호출 후 일정 시간이 지나면 1회 실행 (검색 입력 등)
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+// 스로틀: 일정 시간 간격으로만 실행 (스크롤 등)
+function throttle(fn, interval) {
+  let last = 0;
+  return (...args) => {
+    const now = Date.now();
+    if (now - last >= interval) {
+      last = now;
+      fn(...args);
+    }
+  };
+}
+```
+
+---
+
+브라우저 환경의 핵심은 "**DOM을 다루고, 이벤트에 반응한다**"는 것입니다. 리액트는 이 과정을 선언적으로 추상화하지만, 그 밑바탕인 DOM·이벤트 모델을 알아 두면 동작을 깊이 이해할 수 있습니다. 다음 [(7) 프로퍼티 어트리뷰트와 생성자 함수 편](/posts/js-deep-dive-object-internals)으로 이어집니다.

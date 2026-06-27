@@ -1,0 +1,68 @@
+---
+title: "모던 자바스크립트 Deep Dive 정리 (10) — Ajax와 REST API"
+description: "Ajax의 개념과 동작, REST API 설계 원칙, 그리고 fetch로 데이터를 주고받는 방법을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "javascript"
+tags: ["JavaScript", "Ajax", "REST API", "fetch"]
+---
+
+[(9) 정규 표현식 편](/posts/js-deep-dive-regexp)에 이어, 서버와 데이터를 주고받는 **Ajax**와 **REST API**를 정리합니다. 이 시리즈의 마지막 편입니다.
+
+## Ajax란?
+
+**Ajax(Asynchronous JavaScript and XML)** 는 자바스크립트로 서버와 **비동기**로 데이터를 교환하는 통신 방식입니다. 페이지 전체를 새로고침하지 않고 **필요한 부분만 갱신**할 수 있어, SPA의 토대가 됩니다.
+
+- **전통 방식**: 매 요청마다 완전한 HTML 페이지를 다시 받아 화면 전체를 새로 그림.
+- **Ajax 방식**: 변경에 필요한 데이터(주로 JSON)만 받아 일부만 갱신.
+
+과거에는 `XMLHttpRequest` 객체로 구현했지만, 지금은 **`fetch`** 또는 **`axios`** 를 사용합니다.
+
+## REST API
+
+**REST**는 HTTP를 그 의도에 맞게 사용하기 위한 아키텍처 스타일이며, 그 원칙을 따르는 API가 **REST API**입니다. 핵심 구성은 다음과 같습니다.
+
+- **자원(Resource)**: URI로 표현 (예: `/users`, `/users/1`)
+- **행위(Verb)**: HTTP 메서드로 표현
+- **표현(Representation)**: 주로 JSON
+
+### HTTP 메서드와 의미
+
+| 메서드 | 의미 | 예시 |
+|---|---|---|
+| `GET` | 조회 | `GET /users/1` |
+| `POST` | 생성 | `POST /users` |
+| `PUT` | 전체 수정 | `PUT /users/1` |
+| `PATCH` | 부분 수정 | `PATCH /users/1` |
+| `DELETE` | 삭제 | `DELETE /users/1` |
+
+> URI에는 행위(동사)가 아니라 **자원(명사)** 을 담는 것이 원칙입니다. (`GET /getUser` ❌ → `GET /users/1` ✅)
+
+### 상태 코드
+
+- **2xx**: 성공 (200 OK, 201 Created)
+- **3xx**: 리다이렉션
+- **4xx**: 클라이언트 오류 (400 Bad Request, 401 Unauthorized, 404 Not Found)
+- **5xx**: 서버 오류 (500 Internal Server Error)
+
+## fetch로 통신하기
+
+```javascript
+// 조회
+const res = await fetch("/api/users/1");
+if (!res.ok) throw new Error(`HTTP ${res.status}`);
+const user = await res.json();
+
+// 생성 (POST)
+await fetch("/api/users", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "형기" }),
+});
+```
+
+> `fetch`는 네트워크 오류일 때만 reject하고, **404·500 같은 HTTP 에러는 reject하지 않습니다.** 따라서 `res.ok`(또는 `res.status`)를 직접 확인해야 합니다. 리액트에서는 이런 로딩·에러·캐싱 처리를 [React Query](/posts/react-query)로 깔끔하게 다룰 수 있습니다.
+
+---
+
+이것으로 『모던 자바스크립트 Deep Dive』 정리 시리즈를 마칩니다. 기초 문법(1)부터 객체·비동기·브라우저·통신(10)까지, 프론트엔드 개발의 토대가 되는 자바스크립트의 핵심을 훑었습니다.

@@ -1,0 +1,104 @@
+---
+title: "Nx로 모노레포 구성하기"
+description: "Nx 워크스페이스 생성부터 앱·라이브러리 추가, 캐싱과 Affected 명령, 프로젝트별 배포까지 모노레포 운영을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "build-tools"
+tags: ["Monorepo", "Nx", "워크스페이스"]
+---
+
+**모노레포(Monorepo)** 는 여러 앱과 라이브러리를 하나의 저장소에서 관리하는 방식입니다. 코드 공유가 쉽고, 일관된 도구·설정을 적용할 수 있습니다. 여기서는 **Nx**로 모노레포를 구성하는 흐름을 정리합니다.
+
+## 1. 워크스페이스 생성
+
+```shell
+npx create-nx-workspace@latest my-workspace
+```
+
+실행하면 워크스페이스 이름과 타입(앱/라이브러리 중심)을 선택합니다. 앱 중심으로 설정하면 앱과 라이브러리를 함께 관리하는 기본 폴더 구조가 생성됩니다.
+
+> CLI는 Command Line Interface의 약자로, 텍스트 명령으로 프로그램을 제어하는 방식입니다.
+
+## 2. 워크스페이스 구조
+
+Nx는 `apps`와 `libs` 디렉터리를 자동으로 만듭니다.
+
+- **`apps`**: 개별 애플리케이션이 들어가는 폴더
+- **`libs`**: 공유 코드·유틸리티·UI 컴포넌트가 들어가는 폴더
+
+이 구조 덕분에 여러 프로젝트 간 코드 공유가 쉬워집니다.
+
+## 3. 앱 / 라이브러리 추가
+
+```shell
+# 앱 추가 → apps/my-app
+npx nx generate @nx/react:app my-app
+
+# 라이브러리 추가 → libs/my-lib
+npx nx generate @nx/react:library my-lib
+```
+
+> 📝 **참고**: 과거 패키지 스코프였던 `@nrwl/*`는 현재 **`@nx/*`** 로 변경되었습니다. (예: `@nrwl/react` → `@nx/react`)
+
+## 4. 라이브러리 사용
+
+Nx가 경로 별칭을 자동 관리하므로, 라이브러리를 패키지처럼 import할 수 있습니다.
+
+```tsx
+// apps/my-app/src/main.tsx
+import { MyComponent } from "@my-workspace/my-lib";
+```
+
+## 5. 실행 · 테스트 · 빌드
+
+```shell
+npx nx serve my-app                       # 앱 실행
+npx nx test my-app                        # 테스트
+npx nx run-many --target=build --all      # 전체 빌드
+```
+
+## 6. 캐싱과 Affected 명령
+
+Nx의 강점은 **계산 캐싱**과 **변경 영향 분석**입니다.
+
+- **캐시**: 동일한 작업이 다시 요청되면 캐시된 결과를 재사용해 빠르게 처리합니다.
+- **Affected Commands**: 변경된 부분과 그에 **영향받는 프로젝트만** 실행/빌드합니다. 대규모 모노레포에서 CI 시간을 크게 줄입니다.
+
+```shell
+npx nx affected:build
+```
+
+## 7. 프로젝트별 배포
+
+각 프로젝트는 `apps`/`libs` 아래 **독립 단위**로 정의되며, `project.json`에 빌드·배포 타깃을 둘 수 있습니다.
+
+```json
+{
+  "name": "my-app",
+  "targets": {
+    "build": {
+      "executor": "@nx/webpack:webpack",
+      "options": { "outputPath": "dist/apps/my-app" }
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["echo 배포 시작", "scp -r dist/apps/my-app user@server:/path/to/deploy"],
+        "parallel": false
+      }
+    }
+  }
+}
+```
+
+특정 프로젝트만 배포할 수 있어, 필요한 것만 골라 독립적으로 배포합니다.
+
+```shell
+nx deploy my-app
+```
+
+CI/CD(GitHub Actions 등)와 결합하면 변경된 프로젝트만 선택적으로 빌드·배포하는 워크플로우를 구성할 수 있습니다.
+
+---
+
+> 📝 **참고**: Nx 외에도 **Turborepo**, **pnpm workspaces** 등이 널리 쓰입니다. 가벼운 패키지 공유에는 pnpm workspaces, 강력한 캐싱·태스크 오케스트레이션에는 Nx나 Turborepo가 적합합니다.
