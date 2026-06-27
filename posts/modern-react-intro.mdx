@@ -1,0 +1,89 @@
+---
+title: "모던 리액트 (1) — 입문: Virtual DOM, JSX, props"
+description: "리액트가 등장한 배경과 Virtual DOM의 원리, 작업 환경, 첫 컴포넌트, JSX 규칙, props 전달까지 리액트 입문 내용을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "react"
+tags: ["React", "Virtual DOM", "JSX", "props"]
+---
+
+벨로퍼트님의 『모던 리액트』를 따라가며 정리한 입문 노트입니다.
+
+## 1. 리액트는 어쩌다 만들어졌을까?
+
+- 순수 HTML/JS로는 `id`로 DOM을 선택해 이벤트가 발생할 때마다 속성을 직접 바꿔야 합니다. 인터랙션이 많아지면 이벤트·상태·DOM이 늘어나 **업데이트 규칙이 매우 복잡**해집니다.
+- Ember, Backbone, AngularJS 등은 "특정 값이 바뀌면 특정 DOM 속성이 바뀌도록" 연결해 이 어려움을 일부 해결했습니다.
+- **React**는 발상을 바꿨습니다. DOM 업데이트 규칙을 일일이 정하는 대신, **아예 다 날려버리고 처음부터 새로 만들어 보여준다**는 아이디어에서 출발했습니다.
+- 매번 새로 만들면 느릴 것 같지만, **Virtual DOM**을 사용합니다.
+  - Virtual DOM은 메모리에 가상으로 존재하는 DOM으로, 그냥 JavaScript 객체이기 때문에 실제 브라우저 DOM을 조작하는 것보다 훨씬 빠릅니다.
+  - 상태가 업데이트되면 리액트는 Virtual DOM에 새 UI를 렌더링한 뒤, **효율적인 비교(diffing) 알고리즘**으로 실제 DOM과 비교해 **차이가 있는 곳만** 실제 DOM에 반영(patch)합니다.
+
+## 2. 작업 환경 준비
+
+- **Node.js**: Webpack, Babel 같은 도구가 Node.js 런타임 기반으로 동작합니다.
+- **Yarn**: 개선된 npm. npm은 Node.js에 딸려오는 패키지 매니저로 라이브러리 버전을 관리하며, Yarn은 속도와 캐싱 면에서 더 낫습니다.
+- **코드 에디터**: VS Code.
+- **Git Bash**: 윈도우용 터미널.
+
+## 3. 첫 번째 리액트 컴포넌트
+
+```jsx
+// index.js (옛 방식, React 17 이하)
+ReactDOM.render(<App />, document.getElementById("root"));
+```
+
+`ReactDOM.render`는 실제 DOM 내부에 리액트 컴포넌트를 렌더링하겠다는 의미입니다. `id`가 `root`인 DOM을 선택하는데, 이 DOM은 `public/index.html`에 있습니다.
+
+> 📝 **업데이트 (React 18+)**: `ReactDOM.render`는 폐기되었고, 이제 `createRoot`를 사용합니다. 동시성 기능(Concurrent Features)도 이 API에서 활성화됩니다.
+>
+> ```jsx
+> import { createRoot } from "react-dom/client";
+>
+> const root = createRoot(document.getElementById("root"));
+> root.render(<App />);
+> ```
+
+```html
+<!-- index.html -->
+<div id="root"></div>
+```
+
+결국 리액트 컴포넌트의 렌더링 결과물이 이 `div` 내부에 들어갑니다.
+
+## 4. JSX의 기본 규칙
+
+- JSX는 HTML처럼 생긴 JavaScript입니다. 컴포넌트 파일에 XML 형태로 작성하면 **Babel**이 JavaScript로 변환해 줍니다.
+  - **Babel**은 자바스크립트 문법을 확장해 주는 도구입니다. 아직 지원되지 않는 최신·실험적 문법을 표준 형태로 변환해, 구형 브라우저에서도 실행되게 합니다.
+- **하나의 부모로 감싸기**: 두 개 이상의 태그는 하나로 감싸야 합니다. 불필요한 DOM을 만들지 않으려면 `React.Fragment`(또는 `<>…</>`)를 사용합니다.
+- **주석**: JSX 내부 주석은 `{/* 이런 형태로 */}` 작성합니다.
+
+## 5. props로 컴포넌트에 값 전달하기
+
+함수 파라미터에서 **비구조화 할당(구조 분해)** 을 쓰면 코드를 더 간결하게 작성할 수 있습니다.
+
+```jsx
+function Hello(props) {
+  return <div style={{ color: props.color }}>안녕하세요 {props.name}</div>;
+}
+
+// 비구조화 할당
+function Hello({ color, name }) {
+  return <div style={{ color }}>안녕하세요 {name}</div>;
+}
+
+Hello.defaultProps = {
+  name: "이름없음",
+};
+```
+
+> 📝 **업데이트**: 함수 컴포넌트의 `defaultProps`는 폐기 예정입니다. 이제는 **매개변수 기본값**을 사용하세요.
+>
+> ```jsx
+> function Hello({ color, name = "이름없음" }) {
+>   return <div style={{ color }}>안녕하세요 {name}</div>;
+> }
+> ```
+
+---
+
+리액트의 출발점은 결국 "**상태가 바뀌면 UI를 어떻게 다시 그릴 것인가**"라는 문제이고, 그 해답이 Virtual DOM과 선언적 컴포넌트라는 점을 기억하면 이후 개념들이 자연스럽게 연결됩니다.

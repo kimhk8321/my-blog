@@ -1,0 +1,124 @@
+---
+title: "모던 자바스크립트 Deep Dive 정리 (5) — ES6+ 문법과 클래스"
+description: "디스트럭처링·스프레드, Set·Map, Symbol, 이터러블·제너레이터, ES 모듈, 그리고 클래스 문법까지 모던 자바스크립트의 핵심 기능을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "javascript"
+tags: ["JavaScript", "ES6", "클래스", "모듈"]
+---
+
+[(4) 빌트인 편](/posts/js-deep-dive-builtins)에 이어, 모던 자바스크립트를 특징짓는 ES6+ 문법과 클래스를 정리합니다.
+
+## 디스트럭처링 (구조 분해)
+
+```javascript
+const [a, b, ...rest] = [1, 2, 3, 4]; // a=1, b=2, rest=[3,4]
+const { name, age = 20 } = user; // 기본값 가능
+const { data: { id } } = res; // 중첩 분해
+```
+
+## 스프레드 / 나머지
+
+```javascript
+const merged = [...arr1, ...arr2]; // 배열 펼치기
+const clone = { ...obj, updated: true }; // 객체 복사 + 덮어쓰기
+function sum(...nums) { return nums.reduce((a, b) => a + b, 0); } // 나머지 매개변수
+```
+
+## Set과 Map
+
+```javascript
+// Set — 중복 없는 값의 집합
+const set = new Set([1, 1, 2, 3]);
+set.size; // 3
+[...new Set(arr)]; // 배열 중복 제거 관용구
+
+// Map — 키-값 쌍 (키로 객체도 사용 가능)
+const map = new Map();
+map.set("key", 1);
+map.get("key"); // 1
+map.has("key"); // true
+```
+
+## Symbol
+
+유일무이한 값을 만드는 원시 타입입니다. 충돌하지 않는 프로퍼티 키나 내장 동작(이터레이터 등) 정의에 쓰입니다.
+
+```javascript
+const id = Symbol("id");
+const obj = { [id]: 123 }; // 다른 키와 절대 충돌하지 않음
+```
+
+## 이터러블과 이터레이터
+
+`Symbol.iterator` 메서드를 가진 객체는 **이터러블**이며 `for…of`와 스프레드로 순회할 수 있습니다. (배열, 문자열, Set, Map이 이터러블)
+
+```javascript
+for (const ch of "abc") console.log(ch); // a b c
+```
+
+## 제너레이터
+
+`function*`로 정의하며, `yield`로 실행을 멈췄다 재개할 수 있는 함수입니다.
+
+```javascript
+function* range(start, end) {
+  for (let i = start; i < end; i++) yield i;
+}
+[...range(1, 4)]; // [1, 2, 3]
+```
+
+## ES 모듈 (ESM)
+
+파일 단위로 코드를 나누고 `export`/`import`로 공유합니다.
+
+```javascript
+// math.js
+export const PI = 3.14;
+export default function add(a, b) { return a + b; }
+
+// main.js
+import add, { PI } from "./math.js";
+```
+
+## 클래스
+
+프로토타입 기반 상속을 더 익숙한 문법으로 감싼 것입니다.
+
+```javascript
+class Animal {
+  #secret = "비밀"; // private 필드
+  static species = "동물"; // 정적 멤버
+
+  constructor(name) {
+    this.name = name;
+  }
+
+  speak() {
+    return `${this.name} 소리`;
+  }
+
+  get label() {
+    return `[${this.name}]`; // getter
+  }
+}
+
+class Dog extends Animal {
+  constructor(name) {
+    super(name); // 부모 생성자 호출
+  }
+  speak() {
+    return `${super.speak()} 멍멍`; // 메서드 오버라이딩 + super
+  }
+}
+
+new Dog("바둑이").speak(); // "바둑이 소리 멍멍"
+```
+
+- `extends`로 상속, `super`로 부모 호출
+- `static` 정적 멤버, `#`로 private 필드
+- `get`/`set`으로 접근자 정의
+
+---
+
+ES6+ 문법은 코드를 더 **선언적이고 간결하게** 만들어 줍니다. 특히 디스트럭처링·스프레드·모듈은 리액트를 비롯한 모던 프론트엔드 코드에서 매 순간 쓰이니 손에 익혀 두면 좋습니다.

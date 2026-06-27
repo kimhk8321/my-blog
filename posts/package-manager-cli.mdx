@@ -1,0 +1,40 @@
+---
+title: "패키지 매니저 — npm과 yarn"
+description: "npm과 yarn의 차이, 개발 의존성 구분, 그리고 pnpm·Corepack 등 최신 패키지 매니저 동향을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "build-tools"
+tags: ["npm", "yarn", "pnpm", "패키지 매니저"]
+---
+
+npm과 yarn은 모두 `package.json`에 버전을 명시하고 의존성을 추적·관리하는 **패키지 매니저(CLI)** 입니다.
+
+## npm vs yarn
+
+당시 프로젝트에서는 패키지 매니저를 **yarn으로 통일**했습니다. 이유는 다음과 같았습니다.
+
+- **병렬 설치**: npm은 패키지를 순차적으로 설치하는 반면, yarn은 병렬로 처리해 설치 시간이 짧았습니다.
+- **중복 설치 방지**: yarn은 패키지를 중복 설치하지 않습니다.
+
+## 개발 의존성 구분
+
+패키지를 설치할 때는 **'개발용' 여부를 명확히** 구분합니다. 빌드·테스트·린트처럼 런타임에는 필요 없는 도구는 **개발 의존성(devDependencies)** 으로 추가합니다.
+
+```shell
+yarn add -D [package_name]   # --dev 와 동일
+# npm 의 경우
+npm install -D [package_name]
+```
+
+## 정리
+
+- **dependencies**: 런타임에 필요한 패키지 (예: react, axios)
+- **devDependencies**: 개발 단계에서만 필요한 도구 (예: eslint, vite, typescript)
+
+> 📝 **업데이트**: 위 "npm은 순차 설치라 느리다"는 옛 이야기에 가깝습니다. npm도 5버전 이후 병렬 설치와 lock 파일(`package-lock.json`)을 지원해 격차가 많이 줄었습니다. 한편 **pnpm**은 전역 콘텐츠 주소 저장소에 패키지를 한 번만 저장하고 **하드링크**로 연결해, 디스크 사용량과 설치 속도에서 큰 이점이 있어 최근 널리 채택되고 있습니다.
+>
+> 또한 Node.js에 내장된 **Corepack**으로 프로젝트가 지정한 패키지 매니저·버전을 고정할 수 있습니다. `package.json`에 다음을 넣으면 팀원 모두 같은 매니저를 쓰게 됩니다.
+>
+> ```json
+> { "packageManager": "pnpm@9.15.9" }
+> ```

@@ -1,0 +1,86 @@
+---
+title: "타입스크립트 기초 — 특징과 기본 타입"
+description: "타입이 있는 자바스크립트의 상위 집합인 TypeScript의 핵심 특징(타입 검사, 타입 삭제)과 유니언·제네릭, 기본 타입 문법을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "typescript"
+tags: ["TypeScript", "타입스크립트", "기초"]
+---
+
+## 정의: 타입이 있는 JavaScript의 상위 집합
+
+TypeScript는 JavaScript의 모든 구문을 허용하는 **상위 집합(superset)** 입니다. 핵심 특징을 네 가지로 정리하면 다음과 같습니다.
+
+**구문(Syntax)** — TypeScript는 JS 구문을 그대로 허용합니다. 즉 JS 코드를 TS 파일에 넣어도 잘 작동합니다.
+
+**타입(Types)** — 값의 종류를 검사하는 기능이 추가됐습니다. 예를 들어 `console.log(4 / [])`는 JS에서는 `NaN`을 출력하지만, TS는 "배열로 숫자를 나누는 연산은 옳지 않다"고 판단해 컴파일 단계에서 오류를 발생시킵니다.
+
+**런타임 특성(Runtime Behavior)** — TypeScript는 JavaScript의 런타임 동작을 **절대 바꾸지 않습니다.** 예컨대 `0`으로 나누면 예외가 아니라 `Infinity`를 반환하는 동작이 그대로 유지됩니다. 덕분에 타입 오류가 검출되더라도 실행 방식은 JS와 동일함이 **보장**됩니다.
+
+**삭제된 타입(Erased Types)** — 컴파일러가 타입 검사를 마치면 타입을 **삭제**하고 일반 JS 코드를 만듭니다. 즉 컴파일 결과물에는 타입 정보가 없으며, 타입 시스템은 런타임 동작과 무관합니다. 또한 TypeScript는 별도의 런타임 라이브러리를 제공하지 않아, JS와 동일한 표준 라이브러리를 사용합니다.
+
+## 타입 구성
+
+**유니언(Union)** — 여러 타입 중 하나를 허용합니다.
+
+```typescript
+type Id = number | string;
+
+function printId(id: Id) {
+  console.log(`ID: ${id}`);
+}
+```
+
+**제네릭(Generics)** — 타입에 변수를 제공하는 방법입니다. 사용 시점에 타입을 결정해 재사용성을 높입니다.
+
+```typescript
+function identity<T>(value: T): T {
+  return value;
+}
+
+const a = identity<string>("hello"); // string
+const b = identity(42); // number (추론)
+```
+
+## 핸드북 — 기본 타입
+
+**배열**
+
+```typescript
+let list: number[] = [1, 2, 3];
+let list2: Array<number> = [1, 2, 3]; // 제네릭 배열 타입
+```
+
+**Void** — 보통 반환 값이 없는 함수의 반환 타입을 표현할 때 씁니다.
+
+```typescript
+function warn(): void {
+  console.log("주의!");
+}
+```
+
+**타입 단언(Type Assertion)** — 개발자가 타입을 더 잘 알 때 컴파일러에게 알려줍니다.
+
+```typescript
+let strLength1: number = (<string>someValue).length; // angle-bracket 스타일
+let strLength2: number = (someValue as string).length; // as 스타일
+// JSX와 함께 쓸 때는 as-스타일 단언만 허용됩니다.
+```
+
+**함수**
+
+```typescript
+let myAdd = function (x: number, y: number): number {
+  return x + y;
+};
+```
+
+**객체 / 인덱스 시그니처**
+
+```typescript
+let obj: { [index: string]: number } = { a: 1 };
+```
+
+---
+
+TypeScript의 가장 큰 가치는 "런타임을 바꾸지 않으면서" 컴파일 시점에 오류를 잡아준다는 점입니다. 타입은 코드를 실행하기 전에 작성되는 **문서이자 안전장치**라고 생각하면 이해가 쉽습니다.

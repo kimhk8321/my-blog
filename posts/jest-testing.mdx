@@ -1,0 +1,98 @@
+---
+title: "Jest로 자바스크립트 테스트하기"
+description: "테스트 작성 구조(describe/it/expect)부터 매처, 모킹, React Testing Library 연동까지 Jest의 기본을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "testing"
+tags: ["Jest", "테스트", "TDD"]
+---
+
+> 비어 있던 노트를 새로 정리한 글입니다. Jest는 Meta가 만든 자바스크립트 테스트 프레임워크로, 별도 설정 없이 테스트 실행·assertion·모킹·커버리지를 한 번에 제공합니다.
+
+## 테스트의 기본 구조
+
+테스트는 `describe`(그룹) → `it`/`test`(테스트 케이스) → `expect`(검증)의 구조로 작성합니다.
+
+```js
+// sum.js
+export function sum(a, b) {
+  return a + b;
+}
+```
+
+```js
+// sum.test.js
+import { sum } from "./sum";
+
+describe("sum", () => {
+  it("두 수를 더한다", () => {
+    expect(sum(1, 2)).toBe(3);
+  });
+});
+```
+
+## 자주 쓰는 매처(Matcher)
+
+- `toBe(value)` — 원시값의 일치(`===`)
+- `toEqual(value)` — 객체·배열의 **값** 비교(깊은 비교)
+- `toBeTruthy()` / `toBeFalsy()` — 참/거짓 여부
+- `toContain(item)` — 배열·문자열에 포함 여부
+- `toThrow()` — 예외 발생 여부
+- `not` — 부정 (`expect(x).not.toBe(y)`)
+
+```js
+expect({ a: 1 }).toEqual({ a: 1 });
+expect([1, 2, 3]).toContain(2);
+expect(() => JSON.parse("{")).toThrow();
+```
+
+## 모킹(Mocking)
+
+외부 의존성(네트워크, 모듈, 타이머)을 가짜로 대체해 테스트를 격리합니다.
+
+```js
+// 함수 모킹
+const mockFn = jest.fn().mockReturnValue(42);
+expect(mockFn()).toBe(42);
+expect(mockFn).toHaveBeenCalledTimes(1);
+
+// 모듈 모킹
+jest.mock("./api");
+```
+
+## 비동기 테스트
+
+```js
+it("데이터를 가져온다", async () => {
+  const data = await fetchData();
+  expect(data).toEqual({ ok: true });
+});
+```
+
+## React 컴포넌트 테스트
+
+**React Testing Library**와 함께 사용해, 사용자 관점에서 컴포넌트를 검증합니다.
+
+```jsx
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import Counter from "./Counter";
+
+it("버튼을 누르면 숫자가 증가한다", async () => {
+  render(<Counter />);
+  await userEvent.click(screen.getByRole("button", { name: "+1" }));
+  expect(screen.getByText("1")).toBeInTheDocument();
+});
+```
+
+## 커버리지
+
+```shell
+jest --coverage
+```
+
+라인·분기·함수 커버리지를 리포트로 확인할 수 있습니다.
+
+---
+
+테스트의 핵심은 "**구현이 아니라 동작을 검증**"하는 것입니다. 내부 구현 대신 입력과 출력, 사용자 관점의 결과를 검증하면 리팩터링에도 강한 테스트가 됩니다.

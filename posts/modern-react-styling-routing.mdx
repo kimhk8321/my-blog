@@ -1,0 +1,100 @@
+---
+title: "모던 리액트 (4) — 컴포넌트 스타일링과 라우팅"
+description: "CSS Module·Sass·styled-components 등 리액트 스타일링 방법과 React Router를 이용한 페이지 라우팅을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "react"
+tags: ["React", "스타일링", "styled-components", "React Router"]
+---
+
+[(3) 배열 상태 관리 편](/posts/modern-react-arrays-reducer)에 이어, 컴포넌트를 꾸미는 스타일링과 페이지를 나누는 라우팅을 정리합니다.
+
+## 컴포넌트 스타일링
+
+### 일반 CSS / Sass
+
+가장 기본은 CSS 파일을 import하는 방식입니다. **Sass(SCSS)** 를 쓰면 변수·중첩·믹스인 같은 기능을 추가로 활용할 수 있습니다.
+
+```jsx
+import "./Button.css";
+
+function Button() {
+  return <button className="btn btn--primary">확인</button>;
+}
+```
+
+### CSS Module
+
+클래스 이름을 파일 단위로 **지역화**해 이름 충돌을 막습니다. 파일명을 `*.module.css`로 짓습니다.
+
+```jsx
+import styles from "./Button.module.css";
+
+function Button() {
+  return <button className={styles.primary}>확인</button>;
+}
+```
+
+### styled-components (CSS-in-JS)
+
+자바스크립트 안에서 스타일을 정의하고, props에 따라 동적으로 스타일을 바꿀 수 있습니다.
+
+```jsx
+import styled from "styled-components";
+
+const Button = styled.button`
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: ${(props) => (props.primary ? "#4f46e5" : "#e5e7eb")};
+  color: ${(props) => (props.primary ? "white" : "black")};
+`;
+
+<Button primary>확인</Button>;
+```
+
+> 📝 **참고**: 요즘은 **Tailwind CSS**(유틸리티 클래스)나 **CSS Module**도 널리 쓰입니다. 런타임 비용이 없는 **zero-runtime CSS-in-JS**(vanilla-extract 등)도 대안으로 주목받습니다. 정답은 없으며 팀 컨벤션에 맞추는 것이 중요합니다.
+
+## React Router — 페이지 라우팅
+
+SPA에서 URL에 따라 다른 화면을 보여주려면 라우터가 필요합니다. 대표적으로 **React Router**를 사용합니다.
+
+```jsx
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+
+function App() {
+  return (
+    <BrowserRouter>
+      <nav>
+        <Link to="/">홈</Link>
+        <Link to="/about">소개</Link>
+      </nav>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/posts/:id" element={<Post />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+```
+
+- **`Link`**: 새로고침 없이 페이지를 이동(`a` 태그 대신 사용).
+- **`Route path="/posts/:id"`**: URL 파라미터. 컴포넌트에서 `useParams()`로 읽습니다.
+- **`path="*"`**: 일치하는 경로가 없을 때(404).
+
+```jsx
+import { useParams, useNavigate } from "react-router-dom";
+
+function Post() {
+  const { id } = useParams(); // URL의 :id
+  const navigate = useNavigate(); // 코드로 이동
+  return <button onClick={() => navigate("/")}>홈으로</button>;
+}
+```
+
+> 📝 **참고**: **Next.js**처럼 프레임워크를 쓰면 파일 기반 라우팅(폴더 구조가 곧 URL)을 제공해 별도 라우터 설정이 거의 필요 없습니다. (이 블로그도 Next.js의 App Router를 사용합니다.)
+
+---
+
+스타일링과 라우팅까지 더하면, 작은 컴포넌트들을 모아 **여러 페이지로 구성된 실제 앱**을 만들 수 있습니다. 다음 [(5) 커스텀 훅 편](/posts/modern-react-custom-hooks)으로 이어집니다.

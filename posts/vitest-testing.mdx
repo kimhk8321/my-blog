@@ -1,0 +1,78 @@
+---
+title: "Vitest — Vite 네이티브 테스트 러너"
+description: "Vite 기반 프로젝트를 위한 테스트 러너 Vitest의 특징, 설정, Jest와의 차이를 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "testing"
+tags: ["Vitest", "테스트", "Vite"]
+---
+
+> 비어 있던 노트를 새로 정리한 글입니다. Vitest는 **Vite 기반** 프로젝트를 위한 빠른 테스트 러너로, Jest와 거의 호환되는 API를 제공합니다.
+
+## 특징
+
+- **Vite 네이티브**: 프로젝트의 Vite 설정(별칭, 플러그인, 트랜스폼)을 그대로 재사용합니다. 테스트용 설정을 따로 맞출 필요가 거의 없습니다.
+- **빠른 속도**: ESM과 Vite의 변환 파이프라인을 활용하고, 변경된 파일만 다시 실행하는 **watch 모드**가 빠릅니다.
+- **Jest 호환 API**: `describe`, `it`, `expect`, `vi.fn()` 등 Jest와 거의 동일해 마이그레이션이 쉽습니다.
+- **TS·JSX 기본 지원**: 별도 트랜스파일 설정 없이 동작합니다.
+
+## 기본 사용
+
+```ts
+// sum.test.ts
+import { describe, it, expect } from "vitest";
+import { sum } from "./sum";
+
+describe("sum", () => {
+  it("두 수를 더한다", () => {
+    expect(sum(1, 2)).toBe(3);
+  });
+});
+```
+
+```shell
+npx vitest        # watch 모드
+npx vitest run    # 1회 실행 (CI용)
+```
+
+## 설정
+
+`vite.config.ts`에 `test` 옵션을 추가하면 됩니다.
+
+```ts
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    globals: true, // describe/it/expect를 import 없이 사용
+    environment: "jsdom", // DOM 테스트용
+  },
+});
+```
+
+## 모킹
+
+Jest의 `jest` 대신 `vi`를 사용합니다(이름만 다르고 사용법은 유사).
+
+```ts
+import { vi, expect, it } from "vitest";
+
+const mockFn = vi.fn().mockReturnValue(42);
+it("모킹", () => {
+  expect(mockFn()).toBe(42);
+  expect(mockFn).toHaveBeenCalled();
+});
+```
+
+## Jest와의 차이
+
+| | Jest | Vitest |
+|---|---|---|
+| 빌드 연동 | 별도 트랜스폼(babel-jest 등) 설정 | Vite 설정 재사용 |
+| 모킹 객체 | `jest.fn()` | `vi.fn()` |
+| 속도 | 보통 | ESM·Vite 기반으로 빠름 |
+| 적합한 곳 | 모든 JS 프로젝트 | 특히 Vite 기반 프로젝트 |
+
+---
+
+요약하면, **이미 Vite를 쓰고 있다면 Vitest가 자연스러운 선택**입니다. 설정 중복이 없고, Jest 지식을 거의 그대로 활용할 수 있습니다.

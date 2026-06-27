@@ -1,0 +1,122 @@
+---
+title: "모던 리액트 (2) — 상태와 Hooks"
+description: "useState부터 이벤트 핸들링, 조건부 렌더링, 리스트와 key, useRef, useEffect, useMemo/useCallback, 제어 컴포넌트까지 리액트의 핵심 사용법을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "react"
+tags: ["React", "Hooks", "useState", "useEffect"]
+---
+
+[입문 편](/posts/modern-react-intro)에서 Virtual DOM·JSX·props를 다뤘습니다. 이번에는 실제 화면을 움직이는 **상태(state)** 와 **Hooks**를 정리합니다.
+
+## useState — 상태 관리
+
+컴포넌트가 기억해야 하는 값을 `useState`로 다룹니다. 상태가 바뀌면 컴포넌트가 다시 렌더링됩니다.
+
+```jsx
+import { useState } from "react";
+
+function Counter() {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(count + 1)}>{count}</button>;
+}
+```
+
+- 상태는 **직접 수정하지 않고** 반드시 setter로 바꿉니다.
+- 이전 값을 기반으로 바꿀 때는 **함수형 업데이트**를 씁니다.
+
+```jsx
+setCount((prev) => prev + 1); // 연속 업데이트에 안전
+```
+
+## 이벤트 핸들링
+
+`onClick`, `onChange` 등 카멜케이스 이벤트에 **함수를 전달**합니다(호출 결과가 아니라 함수 자체).
+
+```jsx
+<button onClick={handleClick}>클릭</button>
+<button onClick={() => handleClick(id)}>인자 전달</button>
+```
+
+## 조건부 렌더링
+
+```jsx
+{isLoggedIn ? <Dashboard /> : <Login />}
+{hasError && <p className="error">에러가 발생했습니다</p>}
+```
+
+## 리스트와 key
+
+배열을 `map`으로 렌더링할 때는 각 항목에 고유한 **`key`** 를 줘야 합니다. key는 리액트가 어떤 항목이 바뀌었는지 추적하는 기준입니다.
+
+```jsx
+<ul>
+  {todos.map((todo) => (
+    <li key={todo.id}>{todo.text}</li>
+  ))}
+</ul>
+```
+
+> 배열 인덱스를 key로 쓰는 것은 항목의 순서가 바뀌거나 추가/삭제될 때 버그를 유발할 수 있으니, **안정적인 고유 id**를 사용하세요.
+
+## 제어 컴포넌트 (폼 다루기)
+
+입력값을 상태로 관리해, React가 폼의 "단일 진실 공급원"이 되게 합니다.
+
+```jsx
+function NameForm() {
+  const [name, setName] = useState("");
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); alert(name); }}>
+      <input value={name} onChange={(e) => setName(e.target.value)} />
+      <button type="submit">제출</button>
+    </form>
+  );
+}
+```
+
+## useRef — 렌더링과 무관한 값 / DOM 접근
+
+`useRef`는 ① 리렌더링을 일으키지 않는 값을 보관하거나, ② DOM 요소에 직접 접근할 때 사용합니다.
+
+```jsx
+function TextInput() {
+  const inputRef = useRef(null);
+  return (
+    <>
+      <input ref={inputRef} />
+      <button onClick={() => inputRef.current.focus()}>포커스</button>
+    </>
+  );
+}
+```
+
+## useEffect — 부수효과
+
+렌더링 이후에 실행되는 부수효과(데이터 페칭, 구독, 타이머 등)를 처리합니다. **의존성 배열**로 실행 시점을 제어하고, **정리 함수(cleanup)** 로 뒷정리를 합니다.
+
+```jsx
+useEffect(() => {
+  const id = setInterval(() => console.log("tick"), 1000);
+  return () => clearInterval(id); // cleanup
+}, []); // [] → 마운트 시 1회만
+```
+
+- `[]`: 마운트 시 1회
+- `[value]`: `value`가 바뀔 때마다
+- 생략: 매 렌더링마다 (주의)
+
+## useMemo / useCallback — 메모이제이션
+
+비용이 큰 계산이나 함수 참조를 메모이즈해 불필요한 재계산·재렌더링을 줄입니다.
+
+```jsx
+const sorted = useMemo(() => [...items].sort(compare), [items]); // 값 메모
+const handleClick = useCallback(() => doSomething(id), [id]); // 함수 메모
+```
+
+> 남용하면 오히려 복잡도와 메모리만 늘어납니다. **측정으로 병목이 확인된 곳**에만 적용하세요.
+
+---
+
+리액트의 핵심은 "**상태를 선언하고, 그 상태로부터 UI를 그린다**"는 흐름입니다. Hooks는 이 흐름에 상태·부수효과·참조·메모이제이션을 더해 주는 도구라고 생각하면 자연스럽게 익숙해집니다. 다음 [(3) 배열 상태 관리와 useReducer 편](/posts/modern-react-arrays-reducer)으로 이어집니다.
