@@ -1,0 +1,58 @@
+---
+title: "WebSocket — 실시간 양방향 통신"
+description: "HTTP·Ajax에서 WebSocket으로 이어지는 통신 방식의 발전과 WebSocket의 개념, 이벤트, 장단점을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "network"
+tags: ["WebSocket", "네트워크", "실시간"]
+---
+
+## 배경 — HTTP에서 WebSocket까지
+
+통신 방식은 다음과 같이 발전해 왔습니다.
+
+1. **HTTP 요청**: URL을 통한 요청으로, 매번 새로운 페이지를 요청.
+2. **Ajax**: `XMLHttpRequest`로 서버에 값을 보내고, 서버가 XML·Text·JSON 등으로 응답하면 JavaScript가 그 응답을 DOM에 반영. 페이지 **일부만** 갱신 가능.
+3. **WebSocket**: 2014년 HTML5와 함께 등장. 서버와 클라이언트 간 효율적인 **양방향 통신**을 실현. 채팅, 게임, 실시간 주식 차트 등에 사용.
+
+## WebSocket이란?
+
+HTML5 표준 기술로, HTTP 환경에서 클라이언트와 서버 사이에 **하나의 TCP 연결**을 통해 실시간으로 **전이중(full-duplex) 통신**을 가능하게 하는 프로토콜입니다. WebSocket 이전에는 **Polling**이나 **Long Polling**으로 실시간을 간접 구현했습니다.
+
+- `ws://` 외에 `wss://` 프로토콜도 있으며, 둘의 관계는 HTTP와 HTTPS의 관계와 유사합니다(`wss`는 암호화).
+
+## 이벤트와 사용법
+
+소켓이 정상적으로 만들어지면 네 가지 이벤트를 사용할 수 있습니다.
+
+- **`open`**: 커넥션이 제대로 만들어졌을 때
+- **`message`**: 데이터를 수신했을 때
+- **`error`**: 에러가 생겼을 때
+- **`close`**: 커넥션이 종료되었을 때
+
+데이터를 보낼 때는 `socket.send(data)`를 사용합니다.
+
+```javascript
+const socket = new WebSocket("wss://example.com/chat");
+
+socket.addEventListener("open", () => {
+  socket.send("안녕하세요!");
+});
+
+socket.addEventListener("message", (event) => {
+  console.log("수신:", event.data);
+});
+
+socket.addEventListener("close", () => console.log("연결 종료"));
+socket.addEventListener("error", (e) => console.error("에러", e));
+```
+
+## 문제점 (주의할 점)
+
+- **복잡함**: 비정상적으로 연결이 끊겼을 때를 대비한 **재연결 처리**가 필요합니다.
+- **연결 유지 비용**: 소켓 연결을 유지하는 것 자체가 비용이며, 특히 서버 CPU에 부담이 될 수 있습니다.
+- **호환성**: 아주 오래된 브라우저는 지원하지 않습니다.
+
+---
+
+정리하면, WebSocket은 "**한 번 연결해 두고 서버·클라이언트가 자유롭게 주고받는**" 방식으로, 실시간성이 중요한 기능에 적합합니다. 다만 연결 관리 비용과 재연결 처리를 함께 고려해야 합니다.

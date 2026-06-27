@@ -1,0 +1,57 @@
+---
+title: "BFF (Backend For Frontend) 패턴"
+description: "프론트엔드와 백엔드 사이의 중간 계층인 BFF 패턴의 개념과 장점, 그리고 Next.js로 BFF를 구현하는 방법을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "architecture"
+tags: ["BFF", "아키텍처", "Next.js"]
+---
+
+**BFF(Backend For Frontend)** 는 프론트엔드와 백엔드 사이에서 **중간 역할을 하는 서버 또는 API 계층**을 의미하는 아키텍처 패턴입니다. 각 클라이언트(웹, 모바일 등)에 맞게 최적화된 백엔드 API를 제공하여, 프론트엔드의 요구사항을 더 효율적으로 처리하도록 돕습니다.
+
+## 주요 개념과 특징
+
+1. **프론트엔드 최적화**: 화면에 필요한 형태로 데이터를 미리 가공·집계해 내려줍니다. 클라이언트가 여러 API를 직접 호출하고 조합할 필요가 줄어듭니다.
+2. **각 클라이언트에 맞춤형 서비스 제공**: 웹과 모바일은 화면 크기·요구 데이터가 다릅니다. 클라이언트별로 별도의 BFF를 두어 각자에 최적화된 응답을 제공합니다.
+3. **비즈니스 로직 분리**: 화면 표현을 위한 조합·변환 로직을 BFF가 맡아, 클라이언트는 표현에, 핵심 백엔드는 도메인 로직에 집중합니다.
+4. **통신 간소화**: 여러 마이크로서비스 호출을 BFF가 한 번에 묶어(aggregation) 처리하므로, 클라이언트–서버 간 왕복(round-trip)과 오버페칭/언더페칭이 줄어듭니다.
+
+## 왜 필요한가
+
+마이크로서비스 환경에서는 화면 하나를 그리기 위해 여러 서비스를 호출해야 할 때가 많습니다. 이를 클라이언트가 직접 하면 네트워크 비용과 복잡도가 커집니다. BFF는 이 조합을 서버 측에서 대신 처리해, 클라이언트를 가볍게 유지합니다.
+
+```
+[웹]    → [Web BFF]   ┐
+[모바일] → [Mobile BFF] ├→ [인증 서비스] [상품 서비스] [주문 서비스] …
+```
+
+## Next.js로 BFF 구현하기
+
+Next.js 같은 프레임워크로도 BFF를 구현할 수 있습니다. 클라이언트 요청을 받는 Next.js 서버에 BFF 역할을 하는 API 엔드포인트를 두는 방식입니다.
+
+- **Route Handler(또는 API Routes)**: 클라이언트의 요청을 받아, 백엔드 서비스와 통신해 데이터를 가져온 뒤 가공해서 응답합니다.
+
+```ts
+// app/api/dashboard/route.ts (Next.js Route Handler)
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  // 여러 백엔드 서비스를 BFF에서 한 번에 호출·조합
+  const [user, orders] = await Promise.all([
+    fetch("https://api.internal/user").then((r) => r.json()),
+    fetch("https://api.internal/orders").then((r) => r.json()),
+  ]);
+
+  // 화면에 필요한 형태로 가공해 응답
+  return NextResponse.json({
+    name: user.name,
+    recentOrderCount: orders.length,
+  });
+}
+```
+
+결과적으로 Next.js가 클라이언트 요청을 처리하고, 필요한 데이터를 가져와 가공해 내려주는 **BFF 역할**을 수행합니다. 민감한 키나 내부 엔드포인트를 서버에서만 다룰 수 있다는 보안상의 이점도 있습니다.
+
+---
+
+요약하면 BFF는 "**클라이언트마다 다른 요구를, 그 클라이언트 전용 백엔드가 책임진다**"는 발상입니다. 화면 친화적인 API가 필요하거나, 여러 서비스 호출을 한데 묶어야 할 때 효과적입니다.

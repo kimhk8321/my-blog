@@ -1,0 +1,210 @@
+---
+title: "MobX로 상태 관리하기"
+description: "MobX의 핵심 개념인 observable state, action, computed, reaction을 코드와 함께 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "state-management"
+tags: ["MobX", "상태관리", "React"]
+---
+
+MobX는 "간단하고 확장 가능한 상태 관리" 라이브러리입니다. 변경 사항을 자동으로 추적해 사용 중인 곳에 전달하기 때문에, 별도의 최적화 작업 없이도 필요한 연산만 실행됩니다.
+
+## 왜 MobX인가
+
+- **쉽다**: 상태 변경을 MobX가 알아서 찾아내고 사용처에 전달합니다.
+- **렌더링 최적화**: 데이터의 모든 변경과 사용이 런타임에 추적되어, 상태와 출력 사이의 의존 트리를 구성합니다. 덕분에 상태에 따라 필요한 경우에만 연산이 실행됩니다.
+- **구조가 자유로움**: 코드 분리가 쉽고 재사용·테스트가 용이합니다.
+
+## 세 가지 개념
+
+MobX는 애플리케이션을 다음 세 가지로 구분합니다.
+
+1. **상태(state)**: 상태를 정의하고 관찰 가능하게(observable) 만든다.
+2. **동작(action)**: 사용자 이벤트, 백엔드 푸시 등 state를 변경하는 코드 조각. observable을 변경하는 코드를 action으로 표시하면 MobX가 트랜잭션을 자동 적용해 성능을 최적화한다.
+3. **파생(derivation)**: state 변화에 자동으로 응답하는 값.
+
+### MobX의 원칙
+
+1. *state*가 변경되면 모든 *derivation*이 **자동으로**, 그리고 **원자 단위로** 업데이트됩니다.
+2. 기본적으로 모든 *derivation*은 **동기식**으로 업데이트됩니다. 즉 action이 state를 변경한 직후에 computed 값을 안전하게 검사할 수 있습니다.
+3. *computed 값*은 **느리게(lazy)** 업데이트됩니다. 활발히 사용되지 않는 계산 값은 필요할 때까지 갱신되지 않으며, 사용되지 않으면 가비지로 수집됩니다.
+4. 모든 *computed 값*은 **순수**해야 하며 state를 바꾸면 안 됩니다.
+
+## Observable State
+
+- `makeObservable(target, annotations?, options?)`: 존재하는 객체를 trap하여 observable로 만든다. 보통 클래스 구조에서 사용한다.
+- `makeAutoObservable(target, overrides?, options?)`: 모든 속성을 기본적으로 추론하는, `makeObservable`의 업그레이드 형태. 새 멤버를 명시할 필요가 없어 유지 관리가 쉽다.
+
+`makeAutoObservable`의 추론 규칙:
+
+- 모든 속성은 `observable`로 지정됩니다.
+- 모든 `get`ter는 `computed`로 지정됩니다.
+- 모든 `set`ter는 `action`으로 지정됩니다.
+- 프로토타입 내 함수는 `autoAction`으로 지정됩니다. (다만 중요한 action은 직접 표시해 두는 편이 명확합니다.)
+- 프로토타입 내 제너레이터 함수는 `flow`로 지정됩니다.
+- `overrides`에서 `false`로 표시한 멤버는 주석을 달지 않습니다. (식별자 같은 읽기 전용 필드에 사용)
+
+## Action
+
+`makeAutoObservable`로 대부분 자동화되지만, 핵심 action은 따로 선언하는 편이 좋습니다. 이유는 다음과 같습니다.
+
+1. **트랜잭션 내부에서 실행됩니다.** 가장 바깥쪽 action이 완료될 때까지 reaction이 실행되지 않아, 중간값이 외부에 노출되지 않습니다.
+2. **action 외부에서는 state를 변경할 수 없습니다.** 상태 업데이트가 일어나는 위치가 명확해집니다.
+
+종류:
+
+- **`action.bound`**: 메서드를 올바른 인스턴스에 바인딩. (`makeAutoObservable`은 `autoBind` 옵션으로 사용 가능)
+- **`runInAction`**: 즉시 호출되는 임시 action을 생성. 비동기 프로세스에서 유용합니다.
+
+```javascript
+const state = observable({ value: 0 })
+
+runInAction(() => {
+  state.value++
+  state.value++
+})
+
+const increment = action((state) => {
+  state.value++
+  state.value++
+})
+increment(state)
+```
+
+### 비동기 action 처리
+
+핸들러를 action으로 감싸거나, `runInAction`, 또는 `flow`를 사용할 수 있습니다.
+
+```javascript
+// 1) 핸들러를 action으로 감싸기
+fetchProjects() {
+  this.githubProjects = []
+  this.state = "pending"
+  fetchGithubProjectsSomehow().then(
+    action("fetchSuccess", (projects) => {
+      this.githubProjects = somePreprocessing(projects)
+      this.state = "done"
+    }),
+    action("fetchError", (error) => {
+      this.state = "error"
+    })
+  )
+}
+
+// 2) runInAction
+async fetchProjects() {
+  this.githubProjects = []
+  this.state = "pending"
+  try {
+    const projects = await fetchGithubProjectsSomehow()
+    runInAction(() => {
+      this.githubProjects = somePreprocessing(projects)
+      this.state = "done"
+    })
+  } catch (e) {
+    runInAction(() => {
+      this.state = "error"
+    })
+  }
+}
+```
+
+`flow`는 `async`/`await` 대신 쓸 수 있는 옵션으로, 별도의 `action` 래핑이 필요 없습니다. (TypeScript에서는 반환값을 프라미스로 래핑하기 위해 `flowResult`가 필요합니다.)
+
+```javascript
+// 제너레이터 함수(*) 안에서 await 대신 yield 사용
+*fetchProjects() {
+  this.githubProjects = []
+  this.state = "pending"
+  try {
+    const projects = yield fetchGithubProjectsSomehow()
+    this.githubProjects = somePreprocessing(projects)
+    this.state = "done"
+  } catch (error) {
+    this.state = "error"
+  }
+}
+
+const projects = await flowResult(store.fetchProjects())
+```
+
+## Computed
+
+computed 값은 다른 observable로부터 값을 파생합니다. 느리게 평가되어 출력을 캐싱하고, 의존하는 observable이 변경된 경우에만 다시 계산합니다.
+
+```javascript
+import { makeObservable, observable, computed, autorun } from "mobx"
+
+class OrderLine {
+  price = 0
+  amount = 1
+
+  constructor(price) {
+    makeObservable(this, {
+      price: observable,
+      amount: observable,
+      total: computed,
+    })
+    this.price = price
+  }
+
+  get total() {
+    console.log("Computing...")
+    return this.price * this.amount
+  }
+}
+
+const order = new OrderLine(0)
+const stop = autorun(() => console.log("Total: " + order.total))
+// "Computing..." → "Total: 0"
+
+console.log(order.total) // 재계산 없이 캐시된 0 반환
+order.amount = 5         // "Computing..." (autorun은 total 사용처가 변하지 않아 실행 안 됨)
+order.price = 2          // "Computing..." → "Total: 10"
+```
+
+## Reactions
+
+reaction은 state 변화에 반응해 부수효과를 실행합니다. 가장 기본은 `autorun`입니다.
+
+`autorun(effect)`은 변화를 감지할 때마다, 그리고 생성 시 한 번 실행됩니다. `observable`/`computed`로 표시된 state의 변화에만 반응합니다.
+
+```javascript
+import { makeAutoObservable, autorun } from "mobx"
+
+class Animal {
+  name
+  energyLevel
+
+  constructor(name) {
+    this.name = name
+    this.energyLevel = 100
+    makeAutoObservable(this)
+  }
+
+  reduceEnergy() {
+    this.energyLevel -= 10
+  }
+
+  get isHungry() {
+    return this.energyLevel < 50
+  }
+}
+
+const giraffe = new Animal("Gary")
+
+autorun(() => console.log("Energy level:", giraffe.energyLevel))
+autorun(() => console.log(giraffe.isHungry ? "Now I'm hungry!" : "I'm not hungry!"))
+
+for (let i = 0; i < 10; i++) giraffe.reduceEnergy()
+// energyLevel이 50 미만이 되는 순간 "Now I'm hungry!" 출력
+```
+
+## 여섯 줄 요약
+
+1. 정해둔 **Store 컨벤션**을 잘 지키자.
+2. state를 변경하는 함수에는 **action**을 잘 달자.
+3. fetch가 필요하면 **flow**를 고려해 보자.
+4. **computed**를 잘 이해하고 쓰자.
+5. 개발 중 store 변화를 관측하고 싶으면 **autorun**을 써보자.
+6. (개인적 결론) Context로 주입하기보다 **store를 import해서 직접** 쓰는 편이 단순할 때가 많다.

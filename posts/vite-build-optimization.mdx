@@ -1,0 +1,169 @@
+---
+title: "Vite + React 빌드 최적화"
+description: "Esbuild·코드 분할·트리 셰이킹·자산 최적화·압축 등 Vite와 React 프로젝트의 번들 크기와 빌드 속도를 줄이는 방법을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "build-tools"
+tags: ["Vite", "빌드 최적화", "React", "번들링"]
+---
+
+Vite 기반 React 프로젝트에서 번들 크기와 빌드 속도를 개선하는 방법을 영역별로 정리합니다.
+
+## 1. Vite 설정 최적화
+
+### Esbuild / Terser
+
+Vite는 기본적으로 Esbuild로 빠르게 빌드합니다. 더 높은 압축률이 필요하면 `terser`를 쓸 수 있습니다.
+
+```ts
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  build: {
+    target: "esnext", // 최신 브라우저 대상
+    minify: "esbuild", // 빠른 압축 (기본값)
+    chunkSizeWarningLimit: 500,
+    sourcemap: false, // 프로덕션 소스맵 제외
+  },
+});
+```
+
+```ts
+export default defineConfig({
+  build: {
+    minify: "terser", // 더 높은 압축률(느림)
+    terserOptions: {
+      compress: { drop_console: true, drop_debugger: true },
+    },
+  },
+});
+```
+
+### Vendor 분리 (코드 분할)
+
+자주 바뀌지 않는 외부 라이브러리를 별도 청크로 분리하면 캐시 적중률이 올라갑니다.
+
+```ts
+export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: { vendor: ["react", "react-dom"] },
+      },
+    },
+  },
+});
+```
+
+## 2. React / TypeScript
+
+### 코드 스플리팅
+
+`React.lazy`와 `Suspense`로 필요한 시점에만 컴포넌트를 불러옵니다.
+
+```tsx
+import { Suspense, lazy } from "react";
+const LazyComponent = lazy(() => import("./LazyComponent"));
+
+const App = () => (
+  <Suspense fallback={<div>Loading...</div>}>
+    <LazyComponent />
+  </Suspense>
+);
+```
+
+`React.memo`로 불필요한 재렌더링을 막습니다.
+
+```tsx
+const MyComponent = React.memo(({ data }: { data: string }) => <div>{data}</div>);
+```
+
+### tsconfig 최적화
+
+`skipLibCheck` 등으로 불필요한 컴파일을 줄입니다.
+
+```json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true
+  }
+}
+```
+
+> 📝 **업데이트**: 번들러(Vite)를 쓸 때는 `moduleResolution`을 `node`보다 `bundler`로 두는 것이 권장됩니다(TS 5.0+).
+
+## 3. CSS 및 자산 최적화
+
+- **사용하지 않는 CSS 제거**: 과거에는 `vite-plugin-purgecss`를 썼지만, **Tailwind CSS**처럼 자체적으로 미사용 클래스를 제거(JIT)하는 도구를 쓰면 별도 설정이 거의 필요 없습니다.
+- **CSS 코드 분리**: Vite는 기본적으로 CSS를 별도 파일로 분리해 `index.js` 크기를 줄입니다.
+- **이미지**: WebP/AVIF 등 최적화 포맷으로 변환하거나 CDN으로 제공합니다.
+- **SVG**: `vite-plugin-svgr`로 SVG를 React 컴포넌트처럼 사용합니다.
+
+```ts
+import svgr from "vite-plugin-svgr";
+
+export default defineConfig({ plugins: [svgr()] });
+```
+
+## 4. 환경 변수
+
+Vite는 `.env`로 환경 변수를 관리하며, 클라이언트에 노출할 값은 `VITE_` 접두사를 붙입니다.
+
+```shell
+VITE_API_URL=https://api.example.com
+```
+
+```ts
+const apiUrl = import.meta.env.VITE_API_URL;
+```
+
+## 5. 번들 분석
+
+`rollup-plugin-visualizer`로 번들 구성을 시각화해 무거운 의존성을 찾습니다.
+
+```ts
+import { visualizer } from "rollup-plugin-visualizer";
+
+export default defineConfig({
+  plugins: [visualizer({ filename: "dist/stats.html", open: true })],
+});
+```
+
+빌드 병목은 디버그 로깅으로 파악합니다: `DEBUG=vite:* npm run build`
+
+## 6. 의존성 최적화
+
+- **불필요한 의존성 제거**: `yarn why` / `npm ls`로 점검합니다.
+- **트리 셰이킹**: 전체 임포트 대신 필요한 함수만 가져옵니다.
+
+```ts
+import _ from "lodash"; // 지양
+import debounce from "lodash/debounce"; // 권장 (또는 lodash-es)
+```
+
+- **경량 라이브러리로 교체**: `moment` → `day.js`, `lodash` → 필요한 함수만.
+- **외부화**: 큰 라이브러리를 CDN으로 제공(`build.rollupOptions.external`).
+
+## 7. 캐싱 · CDN · 압축
+
+- `base` 설정으로 정적 파일을 CDN에서 제공합니다.
+- 중요한 리소스는 Preload/Prefetch로 미리 로드합니다.
+- 최종 결과물에 **Gzip / Brotli** 압축을 적용합니다.
+
+```ts
+import compression from "vite-plugin-compression";
+
+export default defineConfig({ plugins: [compression()] });
+```
+
+---
+
+핵심은 **"꼭 필요한 코드만, 가능한 한 작게, 캐시가 잘 되도록"** 내보내는 것입니다. 번들 분석으로 무거운 부분을 찾아 하나씩 줄여 나가세요.

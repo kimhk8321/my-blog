@@ -1,0 +1,195 @@
+---
+title: "프론트엔드 디자인 패턴 정리"
+description: "MVC·MVVM·MVP·Flux 아키텍처 패턴부터 모듈·프록시·싱글톤, 그리고 리액트의 컨테이너·HOC·렌더 프롭·커스텀 훅·컴파운드 컴포넌트 패턴까지 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "architecture"
+tags: ["디자인패턴", "React", "아키텍처"]
+---
+
+자주 마주치는 디자인 패턴을 아키텍처 패턴, 자바스크립트 패턴, 리액트 패턴으로 나누어 정리합니다.
+
+## 아키텍처 패턴
+
+### MVC (Model-View-Controller)
+
+애플리케이션을 세 가지로 분리합니다.
+
+- **Model**: 데이터와 비즈니스 로직. 상태 관리, 유효성 검사를 담당.
+- **View**: 사용자 인터페이스. 데이터 변경을 감지해 UI를 갱신.
+- **Controller**: 사용자 입력을 처리하고, 그에 따라 Model과 View를 업데이트.
+
+### MVVM (Model-View-ViewModel)
+
+**데이터 바인딩**을 지원하는 프레임워크(WPF, Angular 등)에서 유용합니다.
+
+- **Model**: 데이터와 비즈니스 로직.
+- **View**: ViewModel의 데이터를 바인딩해 UI를 렌더링.
+- **ViewModel**: Model 데이터를 View에 맞는 형식으로 변환. View와 Model의 중재자이며, 데이터 바인딩으로 자동 갱신됩니다.
+
+### MVP (Model-View-Presenter)
+
+MVC의 문제를 보완해 View와 로직을 분리합니다. (안드로이드, 웹에서 많이 사용)
+
+- **View**: Presenter와 직접 통신하지만, 데이터 처리는 Presenter가 담당.
+- **Presenter**: View와 Model의 상호작용을 처리하고, View에 직접 데이터를 전달해 UI를 갱신.
+
+### Flux
+
+Facebook이 만든 **단방향 데이터 흐름** 아키텍처입니다. 상태 변경을 추적·예측하기 쉽게 합니다. (Redux의 사상적 뿌리)
+
+- **Action**: 데이터 변경을 트리거하는 이벤트 객체.
+- **Dispatcher**: 액션을 받아 모든 Store에 전달.
+- **Store**: 상태를 관리하고 액션을 처리해 상태를 변경.
+- **View**: UI를 렌더링하고 Store 변화를 구독.
+
+## 자바스크립트 디자인 패턴
+
+### 모듈 패턴
+
+클로저와 즉시 실행 함수(IIFE)로 **캡슐화·정보 은닉**을 구현합니다.
+
+```javascript
+const UserModule = (function () {
+  let userName = "Kim"; // private
+  return {
+    getUserName: () => userName,
+    setUserName: (name) => (userName = name),
+  };
+})();
+
+UserModule.getUserName(); // "Kim"
+```
+
+### 프록시 패턴
+
+`Proxy`로 **원본 객체 접근을 제어**합니다(로깅, 캐싱, 권한 체크 등).
+
+```javascript
+const proxyLoader = new Proxy(imageLoader, {
+  apply(target, thisArg, args) {
+    console.log("Logging the image load request");
+    return target.apply(thisArg, args);
+  },
+});
+```
+
+### 싱글톤 패턴
+
+인스턴스를 **하나만 생성**해 공유합니다(설정 객체, 전역 상태 등).
+
+```javascript
+const Singleton = (function () {
+  let instance;
+  return {
+    getInstance() {
+      if (!instance) instance = { message: "I am the singleton" };
+      return instance;
+    },
+  };
+})();
+
+Singleton.getInstance() === Singleton.getInstance(); // true
+```
+
+## 리액트 디자인 패턴
+
+### 1. 프레젠테이션 & 컨테이너 패턴
+
+UI(Presentational)와 로직(Container)을 분리합니다.
+
+```jsx
+// Presentational — UI만
+const UserProfile = ({ user }) => (
+  <div><h1>{user.name}</h1><p>{user.email}</p></div>
+);
+
+// Container — 상태·로직
+const UserContainer = () => {
+  const [user, setUser] = useState(null);
+  useEffect(() => { fetchUser().then(setUser); }, []);
+  return user ? <UserProfile user={user} /> : <p>Loading...</p>;
+};
+```
+
+### 2. 고차 컴포넌트 (HOC)
+
+컴포넌트를 입력받아 새 컴포넌트를 반환합니다.
+
+```jsx
+function withUserData(Component) {
+  return function Wrapped(props) {
+    const [user, setUser] = useState(null);
+    useEffect(() => { fetchUserData().then(setUser); }, []);
+    return <Component {...props} user={user} />;
+  };
+}
+```
+
+### 3. 렌더 프롭 (Render Props)
+
+함수를 props(또는 children)로 받아 데이터/로직을 주입합니다.
+
+```jsx
+const DataProvider = ({ children }) => {
+  const [data, setData] = useState(null);
+  useEffect(() => { fetchData().then(setData); }, []);
+  return children(data);
+};
+
+<DataProvider>{(data) => (data ? <DisplayData data={data} /> : <p>Loading...</p>)}</DataProvider>
+```
+
+### 4. 커스텀 훅
+
+상태와 로직을 독립 함수로 분리해 재사용합니다. HOC·렌더 프롭보다 훨씬 간결합니다.
+
+```jsx
+function useUserData() {
+  const [user, setUser] = useState(null);
+  useEffect(() => { fetchUserData().then(setUser); }, []);
+  return user;
+}
+
+const UserProfile = () => {
+  const user = useUserData();
+  return user ? <h1>{user.name}</h1> : <p>Loading...</p>;
+};
+```
+
+> 📝 **업데이트**: 과거 로직 공유에 쓰이던 **HOC**와 **렌더 프롭**은, 훅(Hooks) 도입 이후 대부분 **커스텀 훅**으로 대체되었습니다. 새 코드에서는 커스텀 훅을 우선 고려하세요.
+
+### 5. 컨텍스트 API 패턴
+
+전역 상태(테마, 인증 등)를 props drilling 없이 전달합니다.
+
+```jsx
+const ThemeContext = React.createContext("light");
+
+const ThemedComponent = () => {
+  const theme = useContext(ThemeContext);
+  return <div className={`theme-${theme}`}>{theme} 테마</div>;
+};
+```
+
+### 6. 컴파운드 컴포넌트 패턴
+
+연관된 컴포넌트들의 상호작용을 부모가 제어합니다. `children`과 `cloneElement`(또는 Context)를 활용합니다.
+
+```jsx
+const Tabs = ({ children }) => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  return React.Children.map(children, (child, index) =>
+    React.cloneElement(child, {
+      isActive: index === activeIndex,
+      onClick: () => setActiveIndex(index),
+    })
+  );
+};
+
+<Tabs><Tab>Tab 1</Tab><Tab>Tab 2</Tab></Tabs>
+```
+
+---
+
+패턴은 "정답"이 아니라 **상황에 맞는 도구**입니다. 문제(로직 공유, 관심사 분리, 유연한 합성)를 먼저 정의하고, 거기에 맞는 패턴을 고르는 순서가 중요합니다.

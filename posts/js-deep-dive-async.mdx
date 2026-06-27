@@ -1,0 +1,103 @@
+---
+title: "모던 자바스크립트 Deep Dive 정리 (3) — 배열과 비동기"
+description: "배열 고차 함수부터 콜백·Promise·async/await, 그리고 이벤트 루프의 동작 원리까지 자바스크립트의 비동기 처리를 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "javascript"
+tags: ["JavaScript", "비동기", "Promise", "이벤트 루프"]
+---
+
+[(2) 객체·함수 편](/posts/js-deep-dive-objects)에 이어, 실무에서 가장 자주 쓰는 배열 고차 함수와 비동기 처리를 정리합니다.
+
+## 배열 고차 함수
+
+배열을 **선언적으로** 다루는 메서드들입니다. 원본을 바꾸지 않고 새 값을 반환합니다(불변성).
+
+```javascript
+const nums = [1, 2, 3, 4, 5];
+
+nums.map((n) => n * 2);        // [2, 4, 6, 8, 10] — 변환
+nums.filter((n) => n % 2 === 0); // [2, 4] — 선별
+nums.reduce((acc, n) => acc + n, 0); // 15 — 누적
+nums.find((n) => n > 3);        // 4 — 첫 일치 요소
+nums.some((n) => n > 4);        // true — 하나라도 만족?
+nums.every((n) => n > 0);       // true — 모두 만족?
+```
+
+> `forEach`는 반환값이 없고 부수효과용입니다. **값을 만들어 낼 때는 `map`/`filter`/`reduce`** 를 쓰는 편이 의도가 분명합니다.
+
+## 비동기 프로그래밍
+
+자바스크립트는 **싱글 스레드**입니다. 네트워크 요청처럼 오래 걸리는 작업을 기다리는 동안 멈추지 않도록 **비동기**로 처리합니다.
+
+### 콜백과 콜백 지옥
+
+```javascript
+getUser(id, (user) => {
+  getPosts(user, (posts) => {
+    getComments(posts[0], (comments) => {
+      // 중첩이 깊어지는 "콜백 지옥"
+    });
+  });
+});
+```
+
+### Promise
+
+비동기 작업의 **최종 결과(성공/실패)** 를 나타내는 객체입니다. `pending → fulfilled / rejected` 상태를 가집니다.
+
+```javascript
+fetch("/api/user")
+  .then((res) => res.json())
+  .then((user) => console.log(user))
+  .catch((err) => console.error(err))
+  .finally(() => console.log("끝"));
+```
+
+- **`Promise.all`**: 모두 성공해야 성공(하나라도 실패하면 reject).
+- **`Promise.allSettled`**: 각각의 성공/실패 결과를 모두 반환.
+- **`Promise.race`**: 가장 먼저 끝난 하나의 결과를 반환.
+
+```javascript
+const [user, posts] = await Promise.all([fetchUser(), fetchPosts()]);
+```
+
+### async / await
+
+Promise를 **동기 코드처럼** 읽기 쉽게 작성합니다. 에러는 `try…catch`로 처리합니다.
+
+```javascript
+async function loadData() {
+  try {
+    const res = await fetch("/api/user");
+    const user = await res.json();
+    return user;
+  } catch (err) {
+    console.error("실패:", err);
+  }
+}
+```
+
+## 이벤트 루프 (Event Loop)
+
+싱글 스레드인 자바스크립트가 어떻게 비동기를 처리할까요? **이벤트 루프**가 그 비밀입니다.
+
+1. **콜 스택(Call Stack)**: 현재 실행 중인 함수가 쌓이는 곳.
+2. **Web API / 백그라운드**: `setTimeout`, 네트워크 요청 등은 브라우저(런타임)에 위임됩니다.
+3. **태스크 큐**: 완료된 콜백이 대기하는 곳. (마이크로태스크 큐 = Promise 콜백, 매크로태스크 큐 = setTimeout 등)
+4. **이벤트 루프**: 콜 스택이 비면, 큐에서 콜백을 꺼내 스택에 올립니다. 이때 **마이크로태스크 큐를 매크로태스크보다 먼저** 비웁니다.
+
+```javascript
+console.log("1");
+setTimeout(() => console.log("2"), 0); // 매크로태스크
+Promise.resolve().then(() => console.log("3")); // 마이크로태스크
+console.log("4");
+
+// 출력 순서: 1 → 4 → 3 → 2
+```
+
+`setTimeout(…, 0)`이어도 동기 코드와 마이크로태스크(Promise)가 먼저 처리되므로 `2`가 마지막에 출력됩니다.
+
+---
+
+비동기는 처음엔 헷갈리지만, "**언제 콜 스택이 비고, 어떤 큐가 먼저 처리되는가**"라는 이벤트 루프의 규칙을 알면 실행 순서를 예측할 수 있습니다. 다음 [(4) 빌트인 객체 편](/posts/js-deep-dive-builtins)으로 이어집니다.
