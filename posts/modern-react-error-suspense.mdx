@@ -1,0 +1,89 @@
+---
+title: "모던 리액트 (7) — Error Boundary와 Suspense·코드 스플리팅"
+description: "렌더링 중 에러를 잡는 Error Boundary, 비동기 로딩을 선언적으로 다루는 Suspense, 그리고 React.lazy 코드 스플리팅을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "react"
+tags: ["React", "Error Boundary", "Suspense", "코드 스플리팅"]
+---
+
+[(6) API 연동 편](/posts/modern-react-data-fetching)에 이어, 앱을 견고하고 빠르게 만드는 **에러 처리**와 **지연 로딩**을 정리합니다. 이 시리즈의 마지막 편입니다.
+
+## Error Boundary — 렌더링 에러 잡기
+
+컴포넌트 렌더링 중 에러가 나면 기본적으로 **앱 전체가 흰 화면**이 됩니다. **Error Boundary**는 하위 트리의 에러를 잡아 대체 UI를 보여주는 컴포넌트입니다.
+
+```jsx
+import { Component } from "react";
+
+class ErrorBoundary extends Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true }; // 에러 발생 시 상태 갱신
+  }
+
+  componentDidCatch(error, info) {
+    console.error("에러 로깅:", error, info); // 외부 로깅 서비스로 전송
+  }
+
+  render() {
+    if (this.state.hasError) return <h2>문제가 발생했습니다 🙇</h2>;
+    return this.props.children;
+  }
+}
+
+// 사용 — 일부만 격리해 감싸면, 그 부분만 대체 UI로 바뀐다
+<ErrorBoundary>
+  <Dashboard />
+</ErrorBoundary>;
+```
+
+- Error Boundary는 아직 **클래스 컴포넌트로만** 만들 수 있습니다(또는 `react-error-boundary` 라이브러리 사용).
+- 단, **이벤트 핸들러 내부의 에러**나 **비동기 에러**는 잡지 못합니다(그건 `try/catch`로 처리).
+
+## Suspense — 비동기 로딩을 선언적으로
+
+`Suspense`는 자식이 준비될 때까지 **fallback UI**를 보여줍니다. 로딩 상태를 `if (loading)`로 흩뿌리지 않고 한곳에서 선언합니다.
+
+```jsx
+import { Suspense } from "react";
+
+<Suspense fallback={<Spinner />}>
+  <LazyComponent />
+</Suspense>;
+```
+
+## 코드 스플리팅 — React.lazy
+
+처음에 모든 코드를 내려받으면 초기 로딩이 느립니다. **`React.lazy`** 로 컴포넌트를 필요한 시점에 동적으로 불러오면, 번들이 쪼개져(코드 스플리팅) 초기 로딩이 빨라집니다. `Suspense`와 함께 사용합니다.
+
+```jsx
+import { Suspense, lazy } from "react";
+
+const Settings = lazy(() => import("./Settings")); // 별도 청크로 분리
+
+function App() {
+  return (
+    <Suspense fallback={<p>불러오는 중…</p>}>
+      <Settings />
+    </Suspense>
+  );
+}
+```
+
+라우트 단위로 적용하면 효과가 큽니다 — 사용자가 방문한 페이지의 코드만 내려받게 됩니다.
+
+> 📝 **함께 쓰기**: Error Boundary로 감싸고 그 안에 Suspense를 두면, **로딩(Suspense) + 실패(ErrorBoundary)** 를 모두 선언적으로 처리할 수 있습니다. 최신 데이터 페칭 라이브러리(React Query, RSC)도 이 Suspense 모델과 통합되는 방향으로 가고 있습니다.
+
+```jsx
+<ErrorBoundary>
+  <Suspense fallback={<Spinner />}>
+    <Page />
+  </Suspense>
+</ErrorBoundary>
+```
+
+---
+
+이것으로 모던 리액트 시리즈를 마칩니다. Virtual DOM(입문)에서 시작해 상태·Hooks·커스텀 훅·데이터 연동·에러 처리까지, 실제 앱을 만드는 데 필요한 리액트의 골격을 모두 훑었습니다. 견고한 앱은 결국 "**상태를 잘 다루고, 실패와 로딩까지 설계하는 것**"에서 완성됩니다.

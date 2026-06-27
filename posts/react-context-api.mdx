@@ -1,0 +1,77 @@
+---
+title: "React Context API 정리"
+description: "Props Drilling을 피하고 전역 값을 공유하는 React Context API의 개념과 사용법, 커스텀 훅 패턴, 주의점을 정리합니다."
+date: "2026-06-27"
+migrated: true
+category: "state-management"
+tags: ["React", "Context API", "상태관리"]
+---
+
+## Context란?
+
+- Context는 리액트 컴포넌트 간에 어떤 값을 **공유**할 수 있게 해주는 기능입니다.
+- Props와는 또 다른 방식으로 값을 전달하는 방법입니다.
+- 주로 **전역적(global)으로 필요한 값**(테마, 로그인 사용자, 언어 등)을 다룰 때 사용합니다.
+
+## Props로만 전달하지 않는 이유 — Props Drilling 방지
+
+값을 필요로 하는 컴포넌트가 깊숙이 있으면, 중간 컴포넌트들이 자신은 쓰지도 않는 props를 계속 전달해야 합니다. 이를 **Props Drilling**이라 하며, Context는 이 문제를 해결합니다.
+
+```
+App → Layout → Sidebar → Profile  (theme을 Profile까지 props로 계속 내려야 함)
+```
+
+Context를 쓰면 중간 단계를 거치지 않고 필요한 컴포넌트에서 바로 값을 꺼내 쓸 수 있습니다.
+
+## 사용법
+
+1. **`createContext`** 함수로 Context를 만든다.
+2. Context 객체 안의 **`Provider`** 컴포넌트로 자식들을 감싼다.
+3. 공유할 값을 `value` props로 설정하면, 자식 컴포넌트들이 **`useContext`** 로 해당 값에 바로 접근할 수 있다.
+
+```tsx
+import { createContext, useContext, useState } from "react";
+
+type Theme = "light" | "dark";
+
+interface ThemeContextValue {
+  theme: Theme;
+  toggle: () => void;
+}
+
+// 1) Context 생성
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+// 2) Provider로 값 제공
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>("light");
+  const toggle = () => setTheme((t) => (t === "light" ? "dark" : "light"));
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggle }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+// 3) 커스텀 훅으로 안전하게 소비
+export function useTheme() {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) throw new Error("useTheme은 ThemeProvider 안에서 사용해야 합니다.");
+  return ctx;
+}
+```
+
+이제 어느 깊이의 컴포넌트에서든 `useTheme()`으로 값을 꺼내 쓸 수 있습니다.
+
+```tsx
+function ThemeButton() {
+  const { theme, toggle } = useTheme();
+  return <button onClick={toggle}>현재 테마: {theme}</button>;
+}
+```
+
+## 주의할 점
+
+- **불필요한 리렌더링**: Provider의 `value`가 바뀌면 이를 구독하는 모든 컴포넌트가 리렌더링됩니다. 자주 바뀌는 값과 거의 안 바뀌는 값은 **Context를 분리**하거나, `value`를 `useMemo`로 메모이즈하는 것이 좋습니다.
+- **만능 도구는 아니다**: Context는 "값 전달" 메커니즘이지 상태 관리 라이브러리가 아닙니다. 복잡한 서버 상태나 대규모 전역 상태에는 React Query, Redux, Zustand 등 목적에 맞는 도구를 함께 쓰는 편이 낫습니다.

@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import { categories, type Category } from "@/lib/categories";
+import { sortPosts } from "@/lib/post-sort";
 
 const POSTS_DIR = path.join(process.cwd(), "posts");
 
@@ -8,8 +10,10 @@ export interface PostFrontmatter {
   title: string;
   description: string;
   date: string;
+  category?: string;
   tags?: string[];
   draft?: boolean;
+  migrated?: boolean;
 }
 
 export interface PostMeta extends PostFrontmatter {
@@ -49,8 +53,10 @@ export function getPostBySlug(slug: string): Post | null {
     title: fm.title,
     description: fm.description,
     date: fm.date,
+    category: fm.category,
     tags: fm.tags ?? [],
     draft: fm.draft ?? false,
+    migrated: fm.migrated ?? false,
     content,
   };
 }
@@ -58,11 +64,12 @@ export function getPostBySlug(slug: string): Post | null {
 export function getAllPosts(): PostMeta[] {
   const showDrafts = process.env.NODE_ENV !== "production";
 
-  return getPostFileNames()
+  const posts = getPostFileNames()
     .map((name) => getPostBySlug(fileToSlug(name)))
     .filter((p): p is Post => p !== null)
-    .filter((p) => showDrafts || !p.draft)
-    .sort((a, b) => +new Date(b.date) - +new Date(a.date));
+    .filter((p) => showDrafts || !p.draft);
+
+  return sortPosts(posts, "latest");
 }
 
 export function getAllPostSlugs(): string[] {
@@ -85,10 +92,19 @@ export function getPostsByTag(tag: string): PostMeta[] {
   return getAllPosts().filter((post) => (post.tags ?? []).includes(tag));
 }
 
-export function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString("ko-KR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+export function getPostsByCategory(categoryId: string): PostMeta[] {
+  return getAllPosts().filter((post) => post.category === categoryId);
+}
+
+export function getCategoryCounts(): { category: Category; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const post of getAllPosts()) {
+    if (post.category) {
+      counts.set(post.category, (counts.get(post.category) ?? 0) + 1);
+    }
+  }
+  return categories.map((category) => ({
+    category,
+    count: counts.get(category.id) ?? 0,
+  }));
 }
