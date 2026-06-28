@@ -2,6 +2,7 @@
 title: "프론트엔드 성능 최적화 정리"
 description: "Web Vitals 측정부터 렌더링·번들·네트워크·이미지 최적화까지, 프론트엔드 성능을 끌어올리는 핵심 기법을 정리합니다."
 date: "2026-06-27"
+order: 35
 migrated: true
 category: "performance"
 tags: ["성능 최적화", "React", "웹 성능", "Web Vitals"]
@@ -72,6 +73,8 @@ function Dashboard() {
   );
 }
 ```
+
+> Vite 프로젝트라면 청크 분할(`manualChunks`)·압축 플러그인 등 **빌드 설정** 디테일은 [Vite + React 빌드 최적화](/posts/vite-build-optimization)에서 다룹니다.
 
 ## 네트워크 최적화
 
