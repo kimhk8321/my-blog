@@ -1,0 +1,94 @@
+---
+title: "시간복잡도와 Big-O 표기법"
+description: "알고리즘의 효율을 나타내는 Big-O 표기법의 의미와, 자주 등장하는 복잡도 등급을 코드 예제로 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "cs"
+tags: ["알고리즘", "시간복잡도", "Big-O", "CS"]
+---
+
+**Big-O 표기법**은 입력 크기 `n`이 커질 때 알고리즘의 실행 시간(또는 메모리)이 **어떻게 증가하는지**를 나타냅니다. [알고리즘](/posts/algorithm-basics)을 이해하고 비교하는 공통 언어입니다.
+
+## Big-O의 의미
+
+상수나 작은 항은 무시하고, **증가율의 가장 큰 항**만 봅니다. 입력이 커질수록 그 항이 전체를 지배하기 때문입니다.
+
+```
+2n + 10  →  O(n)
+3n² + n  →  O(n²)
+```
+
+"최악의 경우" 성능 상한을 표현합니다.
+
+## 자주 등장하는 복잡도
+
+빠른 것부터 느린 것 순:
+
+| 표기 | 이름 | 예 |
+|---|---|---|
+| **O(1)** | 상수 | 배열 인덱스 접근, 해시 조회 |
+| **O(log n)** | 로그 | 이진 탐색 |
+| **O(n)** | 선형 | 배열 한 번 순회 |
+| **O(n log n)** | 선형로그 | 병합·퀵 정렬 |
+| **O(n²)** | 제곱 | 이중 반복문(버블 정렬) |
+| **O(2ⁿ)** | 지수 | 부분집합 완전 탐색 |
+
+## 코드로 보기
+
+```javascript
+// O(1) — 입력 크기와 무관
+function first(arr) {
+  return arr[0];
+}
+
+// O(n) — 한 번 순회
+function sum(arr) {
+  let total = 0;
+  for (const n of arr) total += n;
+  return total;
+}
+
+// O(n²) — 중첩 순회
+function hasDuplicate(arr) {
+  for (let i = 0; i < arr.length; i++)
+    for (let j = i + 1; j < arr.length; j++)
+      if (arr[i] === arr[j]) return true;
+  return false;
+}
+
+// O(log n) — 매번 절반으로
+function binarySearch(sorted, target) {
+  let lo = 0, hi = sorted.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid] === target) return mid;
+    if (sorted[mid] < target) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
+}
+```
+
+## 자료구조 선택과 복잡도
+
+같은 작업도 [자료구조](/posts/data-structures-deep)에 따라 복잡도가 다릅니다.
+
+- 배열에서 값 찾기: **O(n)** / 해시(Set·Map)에서 찾기: **O(1)**
+- 그래서 "포함 여부 확인"을 반복하면 배열 대신 `Set`을 쓰는 게 유리합니다.
+
+```javascript
+// O(n²): 배열 includes를 반복
+items.filter((x) => others.includes(x));
+
+// O(n): Set으로 O(1) 조회
+const set = new Set(others);
+items.filter((x) => set.has(x));
+```
+
+## 공간 복잡도
+
+시간뿐 아니라 **추가로 쓰는 메모리**도 Big-O로 표현합니다. 시간을 줄이려 메모리를 더 쓰는([DP의 메모이제이션](/posts/js-deep-dive-async) 등) 트레이드오프가 흔합니다.
+
+---
+
+실무에서 모든 코드를 최적화할 필요는 없지만, "**이 로직이 입력이 커지면 몇 배로 느려지는가**"를 가늠하는 감각은 중요합니다. 특히 **중첩 반복(O(n²))을 해시로 O(n)으로** 바꾸는 패턴은 자주 쓰입니다.

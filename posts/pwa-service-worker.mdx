@@ -1,0 +1,75 @@
+---
+title: "PWA와 서비스 워커"
+description: "웹을 앱처럼 만드는 PWA의 구성 요소와, 오프라인·캐싱·푸시를 가능케 하는 서비스 워커의 동작 원리를 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "architecture"
+tags: ["PWA", "서비스 워커", "오프라인", "웹"]
+---
+
+**PWA(Progressive Web App)** 는 웹 기술로 만들면서도 네이티브 앱 같은 경험(설치, 오프라인, 푸시)을 제공하는 방식입니다. 핵심은 **서비스 워커**와 **웹 앱 매니페스트**입니다.
+
+## 웹 앱 매니페스트
+
+앱의 이름·아이콘·시작 화면 등을 정의하는 JSON. 이게 있으면 브라우저가 "홈 화면에 추가"를 제안합니다.
+
+```json
+{
+  "name": "내 블로그",
+  "short_name": "블로그",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+}
+```
+
+## 서비스 워커란
+
+브라우저와 네트워크 사이에서 동작하는 **프록시 스크립트**입니다. 메인 스레드와 별개로 백그라운드에서 실행되며, **네트워크 요청을 가로채** 캐시로 응답하거나, 오프라인 대응·푸시 알림을 처리합니다.
+
+```javascript
+// 등록
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}
+```
+
+서비스 워커의 생명주기: **install → activate → (fetch/push 등 이벤트 처리)**
+
+```javascript
+// sw.js
+const CACHE = "v1";
+
+// 설치 시 핵심 자원 미리 캐시
+self.addEventListener("install", (e) => {
+  e.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(["/", "/styles.css", "/app.js"]))
+  );
+});
+
+// 요청을 가로채 캐시 우선 응답
+self.addEventListener("fetch", (e) => {
+  e.respondWith(
+    caches.match(e.request).then((cached) => cached || fetch(e.request))
+  );
+});
+```
+
+## 캐싱 전략
+
+- **Cache First**: 캐시 우선, 없으면 네트워크 (정적 자산에 적합)
+- **Network First**: 네트워크 우선, 실패 시 캐시 (최신성이 중요한 데이터)
+- **Stale-While-Revalidate**: 캐시로 즉시 응답하고 백그라운드에서 갱신
+
+> [HTTP 캐싱](/posts/http-caching)이 브라우저 기본 캐시라면, 서비스 워커는 **프로그래밍 가능한 캐시**입니다. 더 세밀하게 제어할 수 있습니다.
+
+## 주의할 점
+
+- 서비스 워커는 **HTTPS에서만** 동작합니다(localhost 예외).
+- 강력한 만큼 위험합니다 — 잘못된 캐시가 배포 후에도 남아 "업데이트가 안 되는" 문제가 생길 수 있어, 버전 관리와 갱신 전략이 중요합니다.
+- 직접 작성보다 **Workbox** 같은 라이브러리(또는 Next.js PWA 플러그인)를 쓰면 안전합니다.
+
+---
+
+PWA의 핵심은 "**서비스 워커로 네트워크를 제어해, 느리거나 끊긴 환경에서도 동작하는 웹**"을 만드는 것입니다. 매니페스트로 설치 가능하게, 서비스 워커로 오프라인 가능하게 — 이 둘이 출발점입니다.

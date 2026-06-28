@@ -1,0 +1,100 @@
+---
+title: "자료구조 각론 — 해시, 트리, 그래프"
+description: "해시 테이블·트리·그래프의 동작 원리와 시간복잡도, 그리고 자바스크립트에서의 표현과 활용을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "cs"
+tags: ["자료구조", "해시", "트리", "그래프"]
+---
+
+[CS 기초](/posts/computer-science-basics)에서 훑은 자료구조 중, 실무·코딩테스트에서 특히 중요한 **해시·트리·그래프**를 더 깊이 봅니다.
+
+## 해시 테이블 (Hash Table)
+
+키를 **해시 함수**로 인덱스로 바꿔 저장해, 평균 **O(1)** 으로 삽입·삭제·조회합니다. JS의 `Object`, `Map`, `Set`이 이에 해당합니다.
+
+```javascript
+const map = new Map();
+map.set("user:1", { name: "형기" });
+map.get("user:1"); // O(1)
+```
+
+- **충돌(collision)**: 다른 키가 같은 인덱스로 갈 때. 체이닝(연결 리스트)이나 개방 주소법으로 해결.
+- **활용**: 중복 제거(`Set`), 빈도 세기, 캐시, "포함 여부 O(1) 확인" ([Big-O 글](/posts/big-o-notation)의 최적화 패턴).
+
+```javascript
+// 빈도 세기 — O(n)
+const freq = new Map();
+for (const ch of str) freq.set(ch, (freq.get(ch) ?? 0) + 1);
+```
+
+## 트리 (Tree)
+
+부모-자식 관계의 계층 구조. 루트에서 시작해 가지를 뻗습니다.
+
+- **이진 트리**: 자식이 최대 2개.
+- **이진 탐색 트리(BST)**: 왼쪽 < 부모 < 오른쪽 규칙 → 탐색 평균 **O(log n)** (균형이 깨지면 O(n)).
+- **균형 트리(AVL, Red-Black)**: 균형을 유지해 O(log n) 보장.
+- **활용**: DOM 트리, 파일 시스템, [B-Tree](/posts/cs-database)(DB 인덱스).
+
+트리 순회:
+
+```javascript
+// 깊이 우선 (전위 순회)
+function dfs(node) {
+  if (!node) return;
+  visit(node.value);
+  dfs(node.left);
+  dfs(node.right);
+}
+```
+
+## 그래프 (Graph)
+
+정점(node)과 간선(edge)의 집합. 관계망을 표현합니다(친구 관계, 길찾기, 의존성).
+
+표현 방식:
+
+- **인접 리스트**: 각 정점이 연결된 정점 목록을 가짐 (희소 그래프에 효율적).
+- **인접 행렬**: 2차원 배열로 연결 여부 표시 (밀집 그래프).
+
+```javascript
+// 인접 리스트
+const graph = {
+  A: ["B", "C"],
+  B: ["A", "D"],
+  C: ["A"],
+  D: ["B"],
+};
+```
+
+탐색은 [DFS(스택/재귀)와 BFS(큐)](/posts/algorithm-basics)로 합니다.
+
+```javascript
+// BFS — 최단 경로(가중치 없음)
+function bfs(graph, start) {
+  const visited = new Set([start]);
+  const queue = [start];
+  while (queue.length) {
+    const node = queue.shift();
+    for (const next of graph[node]) {
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+}
+```
+
+## 정리 — 어떤 상황에 무엇을
+
+| 필요 | 자료구조 |
+|---|---|
+| 빠른 조회·중복 제거 | **해시(Map/Set)** |
+| 계층·정렬된 데이터 | **트리(BST)** |
+| 관계망·연결·경로 | **그래프** |
+
+---
+
+자료구조의 선택이 곧 [시간복잡도](/posts/big-o-notation)를 결정합니다. "**이 데이터를 어떻게 저장하면 내가 할 연산이 빨라질까**"를 먼저 생각하는 것이, 좋은 알고리즘의 출발점입니다.

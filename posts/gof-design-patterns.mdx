@@ -1,0 +1,108 @@
+---
+title: "GoF 디자인 패턴 — 생성·구조·행위"
+description: "고전 디자인 패턴(GoF)을 생성·구조·행위 세 분류로 나누어, 대표 패턴의 의도와 자바스크립트 예제를 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "architecture"
+tags: ["디자인패턴", "GoF", "설계"]
+---
+
+**GoF(Gang of Four) 디자인 패턴**은 객체지향 설계에서 반복되는 문제의 검증된 해법 23가지를 정리한 것입니다. **생성·구조·행위** 세 분류로 나뉩니다. ([프론트엔드 디자인 패턴](/posts/design-patterns)이 리액트 중심이었다면, 이 글은 고전 패턴의 분류를 정리합니다.)
+
+## 생성 패턴 (Creational) — 객체를 어떻게 만들까
+
+### 싱글톤 (Singleton)
+
+인스턴스를 하나만 만들어 공유합니다. (설정, 로거 등)
+
+```javascript
+const Config = (() => {
+  let instance;
+  return {
+    getInstance() {
+      if (!instance) instance = { apiUrl: "/api" };
+      return instance;
+    },
+  };
+})();
+```
+
+### 팩토리 (Factory)
+
+객체 생성을 별도 함수/클래스에 위임해, **호출부가 구체 클래스를 모르게** 합니다.
+
+```javascript
+function createButton(type) {
+  if (type === "primary") return new PrimaryButton();
+  if (type === "ghost") return new GhostButton();
+}
+```
+
+### 빌더 (Builder)
+
+복잡한 객체를 단계적으로 조립합니다.
+
+```javascript
+new QueryBuilder().select("name").from("users").where("age > 18").build();
+```
+
+## 구조 패턴 (Structural) — 객체를 어떻게 조합할까
+
+### 어댑터 (Adapter)
+
+호환되지 않는 인터페이스를 변환해 연결합니다. (예: 외부 API 응답을 우리 모델로 변환)
+
+### 데코레이터 (Decorator)
+
+원본을 수정하지 않고 기능을 **감싸서 추가**합니다.
+
+```javascript
+function withLogging(fn) {
+  return (...args) => {
+    console.log("호출:", args);
+    return fn(...args);
+  };
+}
+```
+
+### 프록시 (Proxy)
+
+대상 접근을 가로채 제어합니다(캐싱, 권한, 지연 로딩). JS에는 내장 `Proxy`가 있습니다.
+
+## 행위 패턴 (Behavioral) — 객체가 어떻게 상호작용할까
+
+### 옵저버 (Observer)
+
+상태가 바뀌면 **구독자들에게 자동 통지**합니다. 이벤트 시스템, 상태 관리([MobX](/posts/mobx-state-management))의 토대.
+
+```javascript
+class Subject {
+  observers = [];
+  subscribe(fn) { this.observers.push(fn); }
+  notify(data) { this.observers.forEach((fn) => fn(data)); }
+}
+```
+
+### 전략 (Strategy)
+
+교체 가능한 알고리즘을 캡슐화해, 런타임에 갈아끼웁니다.
+
+```javascript
+const strategies = {
+  asc: (a, b) => a - b,
+  desc: (a, b) => b - a,
+};
+arr.sort(strategies[mode]);
+```
+
+### 커맨드 (Command)
+
+요청을 객체로 캡슐화해 실행·취소(undo)·큐잉을 가능하게 합니다.
+
+## 프론트엔드와의 연결
+
+많은 패턴이 모던 프론트엔드에 녹아 있습니다 — **옵저버**(상태 구독·이벤트), **전략**(정렬·검증 함수 교체), **데코레이터**([HOC](/posts/design-patterns)), **프록시**(JS `Proxy`, 상태 라이브러리).
+
+---
+
+패턴은 외워서 끼워 맞추는 정답이 아니라, "**이런 문제엔 이런 구조가 있더라**"는 **공통 어휘**입니다. 분류(생성·구조·행위)와 대표 패턴의 의도만 알아도 설계 대화가 훨씬 수월해집니다.

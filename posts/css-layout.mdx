@@ -1,0 +1,80 @@
+---
+title: "CSS 레이아웃 — Flexbox와 Grid"
+description: "1차원 레이아웃 Flexbox와 2차원 레이아웃 Grid의 핵심 속성과 사용 기준을 예제와 함께 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "styling"
+tags: ["CSS", "Flexbox", "Grid", "레이아웃"]
+---
+
+현대 CSS 레이아웃의 두 축은 **Flexbox**(1차원)와 **Grid**(2차원)입니다. 둘의 역할과 핵심 속성을 정리합니다.
+
+## Flexbox — 1차원 (행 또는 열)
+
+한 방향(가로 또는 세로)으로 아이템을 정렬합니다. 내비게이션 바, 카드 내부 정렬, 가운데 정렬에 적합합니다.
+
+```css
+.container {
+  display: flex;
+  justify-content: space-between; /* 주축(가로) 정렬 */
+  align-items: center;            /* 교차축(세로) 정렬 */
+  gap: 16px;                      /* 아이템 간격 */
+}
+```
+
+- **`flex-direction`**: `row`(기본) / `column` — 주축 방향
+- **`justify-content`**: 주축 정렬 (`flex-start`, `center`, `space-between`…)
+- **`align-items`**: 교차축 정렬
+- **`flex-wrap`**: 넘치면 줄바꿈
+- 아이템: **`flex: 1`**(남는 공간 분배), `flex-shrink`, `flex-basis`
+
+가운데 정렬의 정석:
+
+```css
+.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+```
+
+## Grid — 2차원 (행과 열 동시)
+
+행과 열을 동시에 다룹니다. 페이지 전체 레이아웃, 카드 그리드, 복잡한 배치에 적합합니다.
+
+```css
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* 3등분 */
+  gap: 16px;
+}
+```
+
+- **`grid-template-columns/rows`**: 트랙 정의. `1fr`(비율), `200px`, `auto`
+- **`repeat(3, 1fr)`**: 반복
+- **`gap`**: 간격
+- **반응형 그리드** (미디어쿼리 없이 자동 줄바꿈):
+
+```css
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+```
+
+위 한 줄이면 화면 폭에 따라 카드 개수가 자동으로 조절됩니다.
+
+## 언제 무엇을
+
+| 상황 | 선택 |
+|---|---|
+| 한 방향 정렬 (내비, 버튼 그룹) | **Flexbox** |
+| 행+열 2차원 배치 (페이지·카드 그리드) | **Grid** |
+| 가운데 정렬 | 둘 다 가능(Flex가 간단) |
+
+> 둘은 경쟁이 아니라 **상호 보완**입니다. 큰 레이아웃은 Grid로 잡고, 그 안의 작은 정렬은 Flex로 하는 식으로 함께 씁니다.
+
+---
+
+과거 `float`·`position`으로 고생하던 레이아웃이 Flexbox·Grid로 훨씬 직관적이 되었습니다. "**한 방향이면 Flex, 두 방향이면 Grid**"만 기억하면 대부분 해결됩니다. 다음은 [반응형 디자인](/posts/responsive-web)으로 이어집니다.

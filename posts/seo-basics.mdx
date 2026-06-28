@@ -1,0 +1,74 @@
+---
+title: "프론트엔드 SEO 기초"
+description: "검색 엔진이 페이지를 잘 이해하도록 돕는 메타 태그, 시맨틱 마크업, 구조화 데이터, 렌더링 방식과 SEO의 관계를 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "performance"
+tags: ["SEO", "메타태그", "구조화 데이터", "Next.js"]
+---
+
+**SEO(검색 엔진 최적화)** 는 검색 엔진이 페이지를 잘 크롤링·이해·노출하도록 돕는 작업입니다. 프론트엔드 개발자가 챙길 수 있는 기술적 SEO를 정리합니다.
+
+## 1. 메타 태그
+
+검색 결과에 노출되는 제목·설명을 지정합니다.
+
+```html
+<title>페이지 제목 — 사이트명</title>
+<meta name="description" content="페이지를 한 문장으로 설명 (검색 결과 미리보기)" />
+<link rel="canonical" href="https://example.com/post/1" /> <!-- 중복 URL 정리 -->
+```
+
+소셜 공유 미리보기는 **Open Graph**로:
+
+```html
+<meta property="og:title" content="제목" />
+<meta property="og:description" content="설명" />
+<meta property="og:image" content="https://example.com/og.png" />
+```
+
+## 2. 시맨틱 마크업과 제목 위계
+
+[시맨틱 HTML](/posts/html-semantic)은 SEO의 기초입니다. 검색 엔진은 `<h1>`~`<h6>` 위계, `<main>`/`<article>` 구조로 콘텐츠의 의미를 파악합니다. 페이지당 핵심 주제를 담은 `<h1>` 하나를 두는 것이 좋습니다.
+
+## 3. 구조화 데이터 (Structured Data)
+
+JSON-LD로 페이지의 의미를 명시하면, 검색 결과에 **리치 스니펫**(별점, FAQ, 작성자 등)이 노출될 수 있습니다.
+
+```html
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "프론트엔드 SEO 기초",
+  "author": { "@type": "Person", "name": "김형기" },
+  "datePublished": "2026-06-28"
+}
+</script>
+```
+
+## 4. 렌더링 방식과 SEO
+
+검색 크롤러는 자바스크립트를 실행하긴 하지만, **초기 HTML에 콘텐츠가 있는 편**이 안전하고 유리합니다.
+
+- **CSR(순수 SPA)**: 초기 HTML이 비어 있어 크롤링에 불리할 수 있음.
+- **SSR/SSG**: 서버가 완성된 HTML을 제공 → SEO에 유리.
+
+→ SEO가 중요한 페이지는 [SSR/SSG](/posts/ssr-rendering)나 Next.js 같은 프레임워크를 쓰는 것이 좋습니다.
+
+## 5. 크롤링 보조 파일
+
+- **`robots.txt`**: 크롤러 접근 규칙.
+- **`sitemap.xml`**: 사이트의 페이지 목록을 알려 크롤링을 돕는다.
+
+> Next.js App Router에서는 `app/sitemap.ts`, `app/robots.ts`, 그리고 `metadata` API로 이 모든 것을 코드로 생성할 수 있습니다. (이 블로그도 그렇게 구성돼 있습니다.)
+
+## 6. 기타 신호
+
+- **성능**: [Core Web Vitals](/posts/frontend-performance-optimization)는 검색 순위 신호입니다(LCP/INP/CLS).
+- **모바일 친화성**: [반응형](/posts/responsive-web)·뷰포트 설정.
+- **HTTPS**: 보안 연결은 기본 신호.
+
+---
+
+기술적 SEO의 핵심은 "**검색 엔진이 콘텐츠를 쉽게 발견하고 이해하게** 만드는 것"입니다. 시맨틱 마크업 + 메타 태그 + 적절한 렌더링 방식 + 좋은 성능 — 이 조합이면 기본은 충분히 갖춰집니다.

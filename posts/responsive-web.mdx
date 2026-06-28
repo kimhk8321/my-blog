@@ -1,0 +1,83 @@
+---
+title: "반응형 웹 디자인"
+description: "뷰포트 메타 태그, 미디어 쿼리, 모바일 퍼스트, 유연한 단위(rem·%·vw)로 모든 화면에 대응하는 방법을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "styling"
+tags: ["반응형", "CSS", "미디어쿼리", "모바일"]
+---
+
+**반응형 웹 디자인(RWD)** 은 하나의 코드베이스로 데스크톱·태블릿·모바일 등 다양한 화면에 대응하는 방식입니다.
+
+## 1. 뷰포트 메타 태그
+
+모바일 대응의 출발점. 이게 없으면 모바일 브라우저가 데스크톱 폭으로 축소 렌더링합니다.
+
+```html
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+```
+
+## 2. 미디어 쿼리
+
+화면 조건에 따라 다른 스타일을 적용합니다.
+
+```css
+/* 기본(모바일) 스타일 */
+.container { padding: 16px; }
+
+/* 768px 이상(태블릿~)에서 덮어쓰기 */
+@media (min-width: 768px) {
+  .container { padding: 32px; }
+}
+```
+
+## 3. 모바일 퍼스트
+
+**작은 화면을 기본**으로 작성하고, `min-width`로 큰 화면을 점진적으로 확장하는 방식입니다.
+
+- 모바일에서 불필요한 스타일을 덜 로드 → 성능에 유리
+- 작은 화면부터 생각하면 콘텐츠 우선순위가 분명해짐
+
+```css
+.grid { display: grid; grid-template-columns: 1fr; }      /* 모바일: 1열 */
+@media (min-width: 640px)  { .grid { grid-template-columns: repeat(2, 1fr); } } /* 2열 */
+@media (min-width: 1024px) { .grid { grid-template-columns: repeat(3, 1fr); } } /* 3열 */
+```
+
+## 4. 유연한 단위
+
+고정 `px` 대신 상대 단위를 쓰면 자연스럽게 늘어나고 줄어듭니다.
+
+- **`%`**: 부모 기준 비율
+- **`rem`**: 루트 폰트 크기 기준 (사용자 글자 크기 설정 존중 → 접근성)
+- **`vw` / `vh`**: 뷰포트 폭/높이 기준
+- **`clamp(min, 선호, max)`**: 범위 안에서 유연하게
+
+```css
+/* 폰트가 화면 크기에 따라 24~40px 사이에서 유연하게 */
+h1 { font-size: clamp(1.5rem, 4vw, 2.5rem); }
+```
+
+## 5. 미디어 쿼리 없이 반응형
+
+[CSS Grid](/posts/css-layout)의 `auto-fill` + `minmax`나 Flexbox의 `flex-wrap`을 쓰면 미디어 쿼리 없이도 유연한 레이아웃이 됩니다.
+
+```css
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+```
+
+## 6. 반응형 이미지
+
+```html
+<img src="small.jpg" srcset="small.jpg 480w, large.jpg 1024w"
+     sizes="(max-width: 600px) 480px, 1024px" alt="" />
+```
+
+화면·해상도에 맞는 이미지를 골라 받아 데이터를 아낍니다. (Next.js의 `next/image`가 자동으로 처리)
+
+---
+
+핵심은 "**모바일을 기본으로, 유연한 단위로 작성하고, 필요한 지점에서만 미디어 쿼리로 조정**"하는 것입니다. 요즘은 Grid/Flex의 자동 배치 덕에 미디어 쿼리 자체도 많이 줄었습니다.

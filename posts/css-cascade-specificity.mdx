@@ -1,0 +1,68 @@
+---
+title: "CSS 동작 원리 — 캐스케이드, 명시도, BEM"
+description: "왜 내 스타일이 안 먹히는가? 캐스케이드와 우선순위, 명시도 계산, 상속, 그리고 BEM 네이밍으로 스타일 충돌을 줄이는 법을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "styling"
+tags: ["CSS", "명시도", "캐스케이드", "BEM"]
+---
+
+"분명히 스타일을 줬는데 안 먹힌다"의 원인은 대부분 **캐스케이드와 명시도**입니다. CSS가 어떤 규칙을 최종 적용하는지 정리합니다.
+
+## 캐스케이드 (Cascade)
+
+여러 규칙이 한 요소에 적용될 때, CSS는 다음 순서로 승자를 결정합니다.
+
+1. **중요도**: `!important` > 일반 선언
+2. **명시도(specificity)**: 더 구체적인 선택자가 우선
+3. **소스 순서**: 같은 명시도면 **나중에 선언된 것**이 우선
+
+## 명시도 계산
+
+선택자의 구체성을 `(A, B, C)`로 따집니다.
+
+- **A** = 인라인 스타일 (`style="…"`)
+- **B** = ID 선택자 (`#id`) 개수
+- **C** = 클래스·속성·가상클래스 (`.class`, `[type]`, `:hover`) 개수
+- **D** = 요소·가상요소 (`div`, `::before`) 개수
+
+```css
+div p          /* (0,0,0,2) */
+.card p        /* (0,0,1,1) → 위보다 우선 */
+#main .card p  /* (0,1,1,1) → 더 우선 */
+```
+
+> **`!important`는 최후의 수단**입니다. 한 번 쓰면 그걸 덮으려 또 `!important`를 쓰는 악순환이 생깁니다.
+
+## 상속 (Inheritance)
+
+`color`, `font` 같은 일부 속성은 자식에게 **상속**됩니다. `margin`, `border` 등 레이아웃 속성은 상속되지 않습니다. `inherit`/`initial`/`unset`으로 제어할 수 있습니다.
+
+## 박스 모델
+
+모든 요소는 content → padding → border → margin의 상자입니다. `box-sizing: border-box`를 쓰면 `width`에 padding·border가 포함되어 계산이 직관적이 됩니다(거의 항상 권장).
+
+```css
+*, *::before, *::after { box-sizing: border-box; }
+```
+
+## BEM — 충돌을 줄이는 네이밍
+
+명시도 전쟁을 피하는 한 가지 방법은 **낮고 평평한 명시도**(클래스 위주)를 유지하는 것입니다. **BEM**(Block-Element-Modifier)은 그 대표적인 규칙입니다.
+
+```html
+<div class="card card--featured">
+  <h2 class="card__title">제목</h2>
+  <button class="card__button card__button--primary">확인</button>
+</div>
+```
+
+- **Block**: 독립 컴포넌트 (`card`)
+- **Element**: 블록의 부분 (`card__title`)
+- **Modifier**: 변형/상태 (`card--featured`)
+
+클래스 하나의 명시도(0,0,1,0)만 쓰므로 충돌과 우선순위 다툼이 줄어듭니다. ([Tailwind](/posts/tailwind-css)나 CSS Module도 같은 문제를 다른 방식으로 해결합니다.)
+
+---
+
+CSS가 "안 먹힐" 때는 화내기 전에 **명시도와 소스 순서**를 확인하세요. 그리고 처음부터 **낮고 일관된 명시도**(클래스 중심, BEM 등)로 작성하면 이런 문제 자체가 거의 생기지 않습니다.
