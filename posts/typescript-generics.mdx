@@ -1,0 +1,100 @@
+---
+title: "타입스크립트 제네릭 심화"
+description: "타입에 변수를 부여하는 제네릭의 개념부터 제약(extends), 기본 타입 매개변수, 제네릭 클래스, 조건부 타입까지 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "typescript"
+tags: ["TypeScript", "제네릭", "타입"]
+---
+
+[타입스크립트 기초](/posts/typescript-basics)에서 제네릭을 잠깐 봤습니다. 이번에는 한 걸음 더 들어가 봅니다.
+
+## 제네릭이란
+
+제네릭은 **타입을 값처럼 매개변수로 받는** 기능입니다. 사용 시점에 타입이 결정되어, 재사용성과 타입 안전성을 동시에 얻습니다.
+
+```typescript
+function identity<T>(value: T): T {
+  return value;
+}
+
+identity<string>("hi"); // T = string
+identity(42); // T = number (추론)
+```
+
+`any`를 쓰면 타입 정보를 잃지만, 제네릭은 **입력과 출력의 관계를 유지**합니다.
+
+## 제약 (Constraints) — extends
+
+제네릭에 "최소한 이런 모양은 보장된다"는 제약을 걸 수 있습니다.
+
+```typescript
+function getLength<T extends { length: number }>(value: T): number {
+  return value.length; // length가 있다는 게 보장됨
+}
+
+getLength("hello"); // 5
+getLength([1, 2, 3]); // 3
+getLength(123); // ❌ number엔 length가 없음
+```
+
+`keyof`와 함께 쓰면 객체의 키를 안전하게 다룰 수 있습니다.
+
+```typescript
+function getProp<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+const user = { name: "형기", age: 30 };
+getProp(user, "name"); // string
+getProp(user, "email"); // ❌ "email"은 키가 아님
+```
+
+## 기본 타입 매개변수
+
+```typescript
+interface ApiResponse<T = unknown> {
+  data: T;
+  status: number;
+}
+
+const res: ApiResponse = { data: "anything", status: 200 }; // T = unknown
+const typed: ApiResponse<string[]> = { data: [], status: 200 };
+```
+
+## 제네릭 클래스 / 인터페이스
+
+```typescript
+class Stack<T> {
+  private items: T[] = [];
+  push(item: T) {
+    this.items.push(item);
+  }
+  pop(): T | undefined {
+    return this.items.pop();
+  }
+}
+
+const stack = new Stack<number>();
+stack.push(1);
+```
+
+## 조건부 타입 (Conditional Types)
+
+`T extends U ? X : Y` 형태로, 타입 수준의 if를 표현합니다.
+
+```typescript
+type IsString<T> = T extends string ? "yes" : "no";
+type A = IsString<string>; // "yes"
+type B = IsString<number>; // "no"
+
+// infer로 내부 타입 추출
+type ElementType<T> = T extends (infer U)[] ? U : T;
+type C = ElementType<number[]>; // number
+```
+
+조건부 타입과 `infer`는 라이브러리 타입(예: `ReturnType`)의 토대가 됩니다. 다음 [유틸리티 타입 편](/posts/typescript-utility-types)에서 이어집니다.
+
+---
+
+제네릭의 핵심은 "**구체 타입을 미루되, 관계는 유지한다**"는 것입니다. 처음엔 `<T>`가 낯설지만, "이 함수는 어떤 타입이든 받되 그 타입을 그대로 돌려준다"처럼 읽으면 자연스러워집니다.

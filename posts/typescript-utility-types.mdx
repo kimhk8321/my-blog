@@ -1,0 +1,95 @@
+---
+title: "타입스크립트 유틸리티 타입"
+description: "Partial·Required·Pick·Omit·Record·Readonly·ReturnType 등 자주 쓰는 내장 유틸리티 타입을 예제와 함께 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "typescript"
+tags: ["TypeScript", "유틸리티 타입", "타입"]
+---
+
+[제네릭 심화](/posts/typescript-generics)에 이어, 타입스크립트가 기본 제공하는 **유틸리티 타입**을 정리합니다. 기존 타입을 변형해 새 타입을 만드는 도구들입니다.
+
+기준이 될 타입을 하나 두겠습니다.
+
+```typescript
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+```
+
+## Partial / Required
+
+```typescript
+// 모든 속성을 선택적으로
+type PartialUser = Partial<User>;
+// { id?: number; name?: string; email?: string }
+
+// 모든 속성을 필수로
+type RequiredUser = Required<PartialUser>;
+```
+
+`Partial`은 수정(update) 함수의 인자 타입으로 자주 쓰입니다.
+
+```typescript
+function updateUser(id: number, patch: Partial<User>) { /* … */ }
+updateUser(1, { name: "새 이름" }); // 일부만 전달 OK
+```
+
+## Pick / Omit
+
+```typescript
+// 특정 속성만 골라서
+type UserPreview = Pick<User, "id" | "name">;
+// { id: number; name: string }
+
+// 특정 속성을 제외하고
+type UserWithoutEmail = Omit<User, "email">;
+// { id: number; name: string }
+```
+
+## Record
+
+키-값 형태의 객체 타입을 간결하게 만듭니다.
+
+```typescript
+type Role = "admin" | "user" | "guest";
+type RolePermissions = Record<Role, string[]>;
+// { admin: string[]; user: string[]; guest: string[] }
+```
+
+## Readonly
+
+```typescript
+type ReadonlyUser = Readonly<User>;
+const u: ReadonlyUser = { id: 1, name: "형기", email: "a@b.com" };
+u.name = "변경"; // ❌ 읽기 전용
+```
+
+## 함수 관련 — ReturnType / Parameters
+
+```typescript
+function createUser(name: string, age: number) {
+  return { name, age, createdAt: Date.now() };
+}
+
+type NewUser = ReturnType<typeof createUser>; // { name: string; age: number; createdAt: number }
+type Args = Parameters<typeof createUser>; // [name: string, age: number]
+```
+
+## 그 외 자주 쓰는 것
+
+- **`NonNullable<T>`**: `null`/`undefined`를 제거
+- **`Exclude<T, U>` / `Extract<T, U>`**: 유니언에서 제외/추출
+- **`Awaited<T>`**: Promise의 결과 타입 추출
+
+```typescript
+type T1 = NonNullable<string | null>; // string
+type T2 = Exclude<"a" | "b" | "c", "a">; // "b" | "c"
+type T3 = Awaited<Promise<number>>; // number
+```
+
+---
+
+유틸리티 타입은 [조건부 타입과 `infer`](/posts/typescript-generics)로 만들어진 것들입니다. 직접 만들 수도 있지만, 내장된 것만 잘 활용해도 타입 중복을 크게 줄일 수 있습니다. "기존 타입에서 **조금 변형한 타입이 필요하다**" 싶을 때 가장 먼저 떠올리세요.

@@ -1,0 +1,64 @@
+---
+title: "데이터베이스 심화 — 인덱스, 트랜잭션, 정규화"
+description: "인덱스의 원리, 트랜잭션과 ACID, 정규화와 반정규화, SQL과 NoSQL의 선택 기준을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "cs"
+tags: ["데이터베이스", "인덱스", "트랜잭션", "SQL"]
+---
+
+[CS 기초](/posts/computer-science-basics)의 데이터베이스 부분을 더 깊이 봅니다.
+
+## 인덱스 (Index)
+
+인덱스는 책의 **색인**과 같습니다. 특정 컬럼에 대한 정렬된 자료구조(주로 [B-Tree](/posts/computer-science-basics))를 따로 두어, 전체 테이블을 훑지 않고 빠르게 찾습니다.
+
+- **조회는 빨라지지만**, 쓰기(INSERT/UPDATE/DELETE) 시 인덱스도 갱신해야 해 **느려지고 저장 공간을 더 씁니다.**
+- 따라서 **자주 검색·정렬·조인하는 컬럼**에 선별적으로 거는 것이 좋습니다.
+- 카디널리티(값의 다양성)가 낮은 컬럼(예: 성별)은 인덱스 효과가 적습니다.
+
+```sql
+CREATE INDEX idx_user_email ON users(email);
+```
+
+## 트랜잭션과 ACID
+
+**트랜잭션**은 "all or nothing"으로 처리되어야 하는 작업의 묶음입니다(예: 계좌 이체 = 출금 + 입금). ACID 성질을 보장합니다.
+
+- **Atomicity(원자성)**: 전부 성공하거나 전부 실패(롤백).
+- **Consistency(일관성)**: 트랜잭션 전후로 무결성 규칙이 유지됨.
+- **Isolation(격리성)**: 동시 트랜잭션이 서로 간섭하지 않음.
+- **Durability(지속성)**: 커밋되면 장애가 나도 보존됨.
+
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 1000 WHERE id = 1;
+UPDATE accounts SET balance = balance + 1000 WHERE id = 2;
+COMMIT; -- 둘 다 성공해야 반영, 중간 실패 시 ROLLBACK
+```
+
+### 격리 수준
+
+동시성과 정합성은 트레이드오프입니다. 격리 수준이 낮을수록 빠르지만 이상 현상(Dirty Read, Non-repeatable Read, Phantom Read)이 생길 수 있습니다. (Read Uncommitted → Read Committed → Repeatable Read → Serializable)
+
+## 정규화 vs 반정규화
+
+- **정규화(Normalization)**: 중복을 제거하고 데이터를 쪼개 무결성을 높입니다. 이상 현상(Anomaly)을 방지합니다.
+- **반정규화(Denormalization)**: 의도적으로 중복을 허용해 **조인을 줄이고 조회 성능**을 높입니다. 읽기가 많은 시스템에서 전략적으로 사용합니다.
+
+> 정규화는 정합성, 반정규화는 성능. 둘은 **트레이드오프**이며 상황에 맞게 절충합니다.
+
+## SQL vs NoSQL
+
+| | SQL (관계형) | NoSQL |
+|---|---|---|
+| 스키마 | 고정(엄격) | 유연 |
+| 구조 | 테이블·관계·조인 | 문서/키-값/그래프 등 |
+| 강점 | 복잡한 쿼리·트랜잭션·정합성 | 수평 확장·유연성·대용량 |
+| 예 | MySQL, PostgreSQL | MongoDB, Redis, DynamoDB |
+
+정합성과 복잡한 관계가 중요하면 SQL, 스키마가 자주 바뀌거나 막대한 확장이 필요하면 NoSQL을 고려합니다. (인메모리 캐시로는 [Redis](/posts/computer-science-basics)를 함께 쓰기도 합니다.)
+
+---
+
+프론트엔드 개발자도 인덱스·트랜잭션·정규화의 개념을 알면, 백엔드와 API·성능을 논의할 때 훨씬 수월합니다. "**왜 이 쿼리가 느린가, 왜 이 데이터는 중복되는가**"를 이해하는 토대가 됩니다.

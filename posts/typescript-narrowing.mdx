@@ -1,0 +1,126 @@
+---
+title: "타입스크립트 타입 좁히기 (Narrowing)"
+description: "typeof·instanceof·in 연산자, 식별 가능한 유니언, 사용자 정의 타입 가드와 단언 함수로 타입을 좁히는 방법을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "typescript"
+tags: ["TypeScript", "타입 좁히기", "타입 가드"]
+---
+
+[유틸리티 타입](/posts/typescript-utility-types)에 이어, 넓은 타입(유니언 등)을 더 구체적인 타입으로 **좁히는(narrowing)** 방법을 정리합니다. 안전한 분기 처리의 핵심입니다.
+
+## typeof 가드
+
+원시 타입을 구분합니다.
+
+```typescript
+function format(value: string | number) {
+  if (typeof value === "string") {
+    return value.toUpperCase(); // 여기선 string
+  }
+  return value.toFixed(2); // 여기선 number
+}
+```
+
+## instanceof 가드
+
+클래스 인스턴스를 구분합니다.
+
+```typescript
+function handle(err: Error | string) {
+  if (err instanceof Error) {
+    console.log(err.message); // Error
+  } else {
+    console.log(err); // string
+  }
+}
+```
+
+## in 연산자 가드
+
+특정 속성의 존재 여부로 구분합니다.
+
+```typescript
+type Dog = { bark: () => void };
+type Cat = { meow: () => void };
+
+function speak(animal: Dog | Cat) {
+  if ("bark" in animal) {
+    animal.bark(); // Dog
+  } else {
+    animal.meow(); // Cat
+  }
+}
+```
+
+## 식별 가능한 유니언 (Discriminated Union)
+
+공통의 **구분용 리터럴 필드**(`kind` 등)를 두면, `switch`로 깔끔하게 좁힙니다. 실무에서 가장 많이 쓰는 패턴입니다.
+
+```typescript
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "square"; side: number };
+
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      return shape.side ** 2;
+  }
+}
+```
+
+### 빠짐없이 처리하기 (Exhaustiveness)
+
+`never`를 이용하면 새 케이스를 빠뜨렸을 때 컴파일 에러로 잡을 수 있습니다.
+
+```typescript
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle": return Math.PI * shape.radius ** 2;
+    case "square": return shape.side ** 2;
+    default:
+      const _exhaustive: never = shape; // 새 kind 추가 시 에러
+      return _exhaustive;
+  }
+}
+```
+
+## 사용자 정의 타입 가드
+
+`value is Type` 형태의 반환 타입으로, 함수가 타입을 좁히게 만듭니다.
+
+```typescript
+type Fish = { swim: () => void };
+type Bird = { fly: () => void };
+
+function isFish(pet: Fish | Bird): pet is Fish {
+  return (pet as Fish).swim !== undefined;
+}
+
+function move(pet: Fish | Bird) {
+  if (isFish(pet)) pet.swim();
+  else pet.fly();
+}
+```
+
+## 단언 함수 (Assertion Functions)
+
+조건이 거짓이면 예외를 던지고, 통과하면 이후 타입을 좁힙니다.
+
+```typescript
+function assertIsString(value: unknown): asserts value is string {
+  if (typeof value !== "string") throw new Error("string이 아닙니다");
+}
+
+function run(input: unknown) {
+  assertIsString(input);
+  input.toUpperCase(); // 여기선 string
+}
+```
+
+---
+
+타입 좁히기는 "**런타임 검사**를 하면 타입스크립트가 그 결과를 **타입에 반영**해준다"는 흐름입니다. 특히 **식별 가능한 유니언 + exhaustive 검사**는 상태 관리(리듀서)나 API 응답 처리에서 버그를 크게 줄여줍니다.

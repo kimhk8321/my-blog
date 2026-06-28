@@ -1,0 +1,68 @@
+---
+title: "HTTP 캐싱 이해하기"
+description: "Cache-Control과 강한 캐시, ETag/Last-Modified 기반의 조건부 요청(약한 캐시), 그리고 캐시 무효화 전략을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "network"
+tags: ["HTTP", "캐싱", "성능", "네트워크"]
+---
+
+HTTP 캐싱은 한 번 받은 리소스를 재사용해 네트워크 비용과 로딩 시간을 줄이는 핵심 메커니즘입니다. [성능 최적화](/posts/frontend-performance-optimization)의 큰 축이기도 합니다.
+
+## 강한 캐시 (Cache-Control)
+
+서버가 응답에 `Cache-Control` 헤더를 실어 "얼마나 오래 캐시해도 되는지"를 알려줍니다. 유효 기간 내에는 **서버에 요청조차 보내지 않고** 캐시를 씁니다.
+
+```http
+Cache-Control: max-age=3600        # 3600초 동안 신선함
+Cache-Control: no-cache            # 캐시하되 매번 서버에 검증 요청
+Cache-Control: no-store            # 절대 캐시하지 않음
+Cache-Control: public, max-age=31536000, immutable  # 정적 자산(변하지 않음)
+```
+
+- **`max-age`**: 신선하다고 간주하는 시간(초).
+- **`no-cache`**: 캐시는 하되 사용 전 **항상 서버에 검증**(아래 조건부 요청).
+- **`no-store`**: 민감 데이터 등 캐시 금지.
+- **`immutable`**: 만료 전까지 재검증도 하지 말라(해시 박힌 빌드 파일에 적합).
+
+## 약한 캐시 (조건부 요청)
+
+캐시가 만료되면 무조건 다시 받는 게 아니라, **"바뀌었는지만 물어봅니다."** 안 바뀌었으면 본문 없이 **304 Not Modified** 를 받아 캐시를 재사용합니다.
+
+두 가지 검증자(validator):
+
+- **ETag / If-None-Match**: 리소스의 내용 해시(지문)로 비교.
+- **Last-Modified / If-Modified-Since**: 마지막 수정 시각으로 비교.
+
+```http
+# 1차 응답
+ETag: "abc123"
+
+# 이후 요청 — 브라우저가 가진 ETag를 함께 보냄
+If-None-Match: "abc123"
+
+# 서버 응답 — 안 바뀜
+HTTP/1.1 304 Not Modified   # 본문 없음 → 캐시 재사용
+```
+
+## 캐시 무효화 전략 — 파일명 해싱
+
+정적 자산을 오래 캐시(`max-age=31536000, immutable`)하면서도 배포 시 새 버전을 즉시 반영하려면, **파일명에 콘텐츠 해시**를 박습니다.
+
+```
+app.3f9a2c.js  →  내용이 바뀌면 app.7b1e0d.js 로 파일명이 달라짐
+```
+
+파일명이 곧 버전이므로, 오래 캐시해도 새 배포 시 브라우저가 **새 URL**을 받아 자동으로 새로 내려받습니다. (Vite/Next.js 등이 빌드 시 자동으로 해줍니다.)
+
+## 정리 — 무엇을 어떻게
+
+| 리소스 | 전략 |
+|---|---|
+| 해시 박힌 정적 자산(JS/CSS) | `max-age=31536000, immutable` (오래, 무효화는 파일명으로) |
+| HTML | `no-cache` (항상 검증) 또는 짧은 max-age |
+| API 응답(가변) | `no-store` 또는 짧은 max-age + ETag |
+
+---
+
+핵심 흐름은 "**신선하면 캐시 그대로(강한 캐시), 만료되면 바뀌었는지만 확인(약한 캐시/304)**"입니다. 여기에 파일명 해싱을 더하면, 빠른 캐시와 즉각적인 배포 반영을 동시에 얻을 수 있습니다.

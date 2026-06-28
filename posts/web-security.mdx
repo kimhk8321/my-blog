@@ -1,0 +1,64 @@
+---
+title: "프론트엔드 웹 보안 — XSS, CSRF, CORS"
+description: "프론트엔드 개발자가 알아야 할 대표 웹 취약점인 XSS·CSRF의 원리와 방어, 그리고 CORS의 동작을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "network"
+tags: ["웹 보안", "XSS", "CSRF", "CORS"]
+---
+
+프론트엔드 개발자가 자주 마주치는 보안 주제 세 가지 — XSS, CSRF, CORS를 정리합니다.
+
+## XSS (Cross-Site Scripting)
+
+공격자가 **악성 스크립트를 페이지에 주입**해 다른 사용자의 브라우저에서 실행시키는 공격입니다. 토큰 탈취, 세션 하이재킹 등으로 이어집니다.
+
+```javascript
+// 위험: 사용자 입력을 그대로 HTML로 삽입
+element.innerHTML = userInput; // <img src=x onerror="steal()"> 가 실행될 수 있음
+```
+
+**방어**
+
+- 사용자 입력을 HTML로 넣지 말고 **`textContent`** 를 사용 (이스케이프).
+- 리액트는 기본적으로 값을 이스케이프합니다 — 단 **`dangerouslySetInnerHTML`** 은 위험하니 신뢰할 수 없는 값엔 쓰지 마세요. 꼭 써야 하면 **DOMPurify** 등으로 정화(sanitize).
+- **CSP(Content-Security-Policy)** 헤더로 실행 가능한 스크립트 출처를 제한.
+- 인증 토큰은 [`HttpOnly` 쿠키](/posts/browser-storage)에 두어 스크립트로 못 읽게 합니다.
+
+## CSRF (Cross-Site Request Forgery)
+
+로그인된 사용자의 **인증 정보(쿠키)가 자동 전송**되는 점을 악용해, 사용자가 의도하지 않은 요청을 보내게 만드는 공격입니다.
+
+```html
+<!-- 공격자 사이트에 심어둔 요청 — 사용자의 쿠키가 자동으로 함께 전송됨 -->
+<img src="https://bank.com/transfer?to=attacker&amount=1000000" />
+```
+
+**방어**
+
+- **`SameSite` 쿠키 속성**(`Lax`/`Strict`): 크로스 사이트 요청에 쿠키가 실리지 않게 함 (가장 기본적이고 효과적).
+- **CSRF 토큰**: 서버가 발급한 예측 불가 토큰을 요청에 포함시켜 검증.
+- 상태를 바꾸는 작업은 `GET`이 아니라 `POST`/`PUT`/`DELETE`로.
+
+> XSS는 "스크립트 주입", CSRF는 "자동 전송되는 인증을 악용" — 결이 다릅니다. `HttpOnly`는 XSS로부터, `SameSite`는 CSRF로부터 쿠키를 보호합니다.
+
+## CORS (Cross-Origin Resource Sharing)
+
+CORS는 공격이 아니라 **브라우저의 보안 정책**입니다. 기본적으로 브라우저는 **다른 출처(origin)** 로의 요청 응답을 차단하는데(SOP, 동일 출처 정책), 서버가 허용 헤더를 보내면 풀어줍니다.
+
+> 출처(origin) = 프로토콜 + 호스트 + 포트. 하나라도 다르면 cross-origin.
+
+서버가 응답에 다음 헤더를 보내야 브라우저가 허용합니다.
+
+```http
+Access-Control-Allow-Origin: https://my-site.com
+Access-Control-Allow-Methods: GET, POST
+Access-Control-Allow-Credentials: true
+```
+
+- 복잡한 요청 전에는 브라우저가 **사전 요청(Preflight, `OPTIONS`)** 으로 허용 여부를 먼저 확인합니다.
+- CORS 에러는 **프론트가 아니라 서버에서** 헤더로 해결합니다. (프론트에서 "우회"하는 게 아닙니다.)
+
+---
+
+요약하면, **XSS** = 입력을 이스케이프/정화하고 토큰은 `HttpOnly`로, **CSRF** = `SameSite` 쿠키와 토큰으로, **CORS** = 서버의 허용 헤더로 다룹니다. 프론트엔드 개발자도 이 셋의 원리는 반드시 알아두는 것이 좋습니다.

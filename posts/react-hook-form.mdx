@@ -1,0 +1,82 @@
+---
+title: "React Hook Form으로 폼 다루기"
+description: "비제어 기반으로 리렌더링을 줄이는 React Hook Form의 기본 사용법과 유효성 검사, Zod 스키마 연동을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "react"
+tags: ["React", "React Hook Form", "폼", "유효성 검사"]
+---
+
+[제어 컴포넌트](/posts/modern-react-hooks)로 폼을 만들면 입력마다 상태가 바뀌어 리렌더링이 잦습니다. **React Hook Form(RHF)** 은 비제어(uncontrolled) 방식을 기반으로 이 비용을 줄이고, 유효성 검사를 간결하게 처리합니다.
+
+## 기본 사용
+
+```tsx
+import { useForm } from "react-hook-form";
+
+type FormValues = { email: string; password: string };
+
+function LoginForm() {
+  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>();
+
+  const onSubmit = (data: FormValues) => console.log(data);
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <input {...register("email", { required: "이메일은 필수입니다" })} />
+      {errors.email && <p>{errors.email.message}</p>}
+
+      <input
+        type="password"
+        {...register("password", { minLength: { value: 8, message: "8자 이상" } })}
+      />
+      {errors.password && <p>{errors.password.message}</p>}
+
+      <button type="submit">로그인</button>
+    </form>
+  );
+}
+```
+
+- **`register`**: 입력을 폼에 등록(ref 연결). 제어 상태가 아니라 리렌더가 적음.
+- **`handleSubmit`**: 유효성 검사를 통과하면 콜백을 호출.
+- **`formState.errors`**: 필드별 에러.
+
+## 왜 빠른가
+
+제어 컴포넌트는 키 입력마다 `setState` → 리렌더가 일어납니다. RHF는 입력값을 **ref로 추적**해, 값이 바뀌어도 전체 리렌더가 발생하지 않습니다. 폼이 크고 필드가 많을수록 이점이 커집니다.
+
+## Zod 스키마로 유효성 검사
+
+규칙을 인라인으로 흩뿌리는 대신, **스키마**로 한곳에 모으면 타입까지 함께 얻습니다.
+
+```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const schema = z.object({
+  email: z.string().email("이메일 형식이 아닙니다"),
+  age: z.coerce.number().min(19, "19세 이상"),
+});
+
+type FormValues = z.infer<typeof schema>;
+
+function SignupForm() {
+  const { register, handleSubmit, formState: { errors } } =
+    useForm<FormValues>({ resolver: zodResolver(schema) });
+  // …
+}
+```
+
+`z.infer`로 스키마에서 타입을 추출하므로, **검증 규칙과 타입이 항상 일치**합니다.
+
+## 자주 쓰는 것
+
+- **`watch`**: 특정 필드 값을 실시간으로 구독
+- **`setValue` / `reset`**: 값 설정 / 초기화
+- **`Controller`**: 외부 UI 라이브러리(제어 컴포넌트)를 RHF와 연결할 때
+
+---
+
+폼이 단순하면 [제어 컴포넌트](/posts/modern-react-hooks)로 충분하지만, **필드가 많거나 유효성 검사가 복잡해지면** React Hook Form + Zod 조합이 코드와 리렌더를 모두 줄여줍니다.

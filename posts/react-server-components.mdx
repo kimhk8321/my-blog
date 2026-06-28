@@ -1,0 +1,75 @@
+---
+title: "React Server Components (RSC) 이해하기"
+description: "서버 컴포넌트와 클라이언트 컴포넌트의 차이, 경계 설정, 직렬화 제약 등 RSC의 핵심 개념을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "architecture"
+tags: ["React", "RSC", "Next.js", "서버 컴포넌트"]
+---
+
+**React Server Components(RSC)** 는 컴포넌트를 **서버에서 렌더링하고 결과만 클라이언트로 보내는** 모델입니다. Next.js App Router의 기반이기도 합니다. [App Router 기초](/posts/nextjs-app-router)에 이어 RSC를 깊이 봅니다.
+
+## 무엇이 다른가
+
+기존 SSR은 "서버에서 HTML을 만들고, 클라이언트가 같은 JS로 하이드레이션"했습니다. RSC는 여기서 한 발 더 나아가, **일부 컴포넌트의 JS는 아예 클라이언트로 보내지 않습니다.**
+
+- **서버 컴포넌트(기본)**: 서버에서만 실행. 렌더 결과(직렬화된 트리)만 전송 → **번들에 포함되지 않음**.
+- **클라이언트 컴포넌트(`"use client"`)**: 기존 React 컴포넌트처럼 브라우저에서 실행.
+
+## 서버 컴포넌트의 장점
+
+- **번들 감소**: 무거운 라이브러리(마크다운 파서, 날짜 라이브러리 등)를 서버에서만 쓰면 클라이언트 JS가 줄어듭니다.
+- **데이터에 직접 접근**: DB·파일시스템·비밀키를 컴포넌트 안에서 바로 사용 (브라우저에 노출 안 됨).
+- **async 컴포넌트**: 서버 컴포넌트는 `async`로 작성해 직접 `await` 할 수 있습니다.
+
+```tsx
+// 서버 컴포넌트 — async로 직접 데이터 패칭
+export default async function Posts() {
+  const posts = await db.post.findMany(); // 브라우저로 전송되지 않는 코드
+  return (
+    <ul>
+      {posts.map((p) => (
+        <li key={p.id}>{p.title}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+## 경계 — "use client"
+
+`"use client"`는 **그 지점부터 아래(자식)가 클라이언트 번들에 포함된다**는 경계 표시입니다. 한 번 클라이언트 경계로 들어가면 그 안은 모두 클라이언트입니다.
+
+핵심 패턴: **서버 컴포넌트가 클라이언트 컴포넌트를 자식으로 렌더링**하고, 데이터는 props(또는 `children`)로 내려줍니다.
+
+```tsx
+// 서버 컴포넌트
+import { LikeButton } from "./LikeButton"; // "use client"
+
+export default async function Post({ id }: { id: string }) {
+  const post = await getPost(id);
+  return (
+    <article>
+      <h1>{post.title}</h1>
+      <LikeButton postId={post.id} /> {/* 상호작용만 클라이언트로 */}
+    </article>
+  );
+}
+```
+
+## 제약 — 직렬화
+
+서버 → 클라이언트로 넘기는 props는 **직렬화 가능**해야 합니다. 함수, 클래스 인스턴스 등은 넘길 수 없습니다(이벤트 핸들러는 클라이언트 컴포넌트 내부에서 정의).
+
+또한 서버 컴포넌트에서는 `useState`/`useEffect`/브라우저 API/이벤트 핸들러를 쓸 수 없습니다 — 그것들은 클라이언트 컴포넌트의 몫입니다.
+
+## 언제 무엇을
+
+| 필요 | 컴포넌트 |
+|---|---|
+| 데이터 패칭, 비밀키, 무거운 의존성 | **서버** (기본) |
+| 상태, 이벤트, 브라우저 API, 애니메이션 | **클라이언트** (`"use client"`) |
+
+---
+
+RSC의 핵심 사고는 "**기본은 서버, 상호작용이 필요한 잎(leaf)만 클라이언트로**"입니다. 이렇게 하면 [데이터 패칭](/posts/nextjs-data-fetching)을 서버에서 자연스럽게 처리하면서 클라이언트 번들을 최소로 유지할 수 있습니다.

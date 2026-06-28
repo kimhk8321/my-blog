@@ -1,0 +1,89 @@
+---
+title: "상태관리 라이브러리 비교 — Context, Redux, Zustand, Jotai"
+description: "Context API부터 Redux Toolkit, Zustand, Jotai까지 클라이언트 상태관리 도구의 특징과 선택 기준을 비교합니다."
+date: "2026-06-28"
+migrated: true
+category: "state-management"
+tags: ["상태관리", "Redux", "Zustand", "Jotai"]
+---
+
+리액트의 클라이언트 상태관리 도구는 종류가 많습니다. 각각의 철학과 적합한 상황을 비교해 봅니다. (서버 상태는 [React Query](/posts/react-query)에 맡기는 것을 전제로 합니다.)
+
+## Context API
+
+리액트 내장 기능. 별도 의존성이 없고 전역 값 전달에 적합하지만, **상태관리 라이브러리는 아닙니다.**
+
+- 👍 의존성 없음, 테마·인증 등 자주 안 바뀌는 값에 적합
+- 👎 value가 바뀌면 구독 컴포넌트가 모두 리렌더링 → 자주 바뀌는 상태엔 부적합
+
+자세한 내용은 [Context API 정리](/posts/react-context-api) 참고.
+
+## Redux (Toolkit)
+
+**예측 가능성**과 **엄격한 단방향 흐름**이 강점. 대규모 앱, 복잡한 상태 전이, 강력한 DevTools(타임트래블)가 필요할 때.
+
+```ts
+const counterSlice = createSlice({
+  name: "counter",
+  initialState: { value: 0 },
+  reducers: { increment: (s) => { s.value += 1; } },
+});
+```
+
+- 👍 예측 가능, 미들웨어 생태계, 디버깅 도구
+- 👎 보일러플레이트(RTK로 많이 줄었지만 여전히 개념이 무거움)
+
+자세한 내용은 [Redux 기본](/posts/redux-basics) 참고.
+
+## Zustand
+
+훅 기반의 가볍고 간결한 라이브러리. 보일러플레이트가 거의 없습니다.
+
+```ts
+import { create } from "zustand";
+
+const useStore = create((set) => ({
+  count: 0,
+  increment: () => set((s) => ({ count: s.count + 1 })),
+}));
+
+function Counter() {
+  const { count, increment } = useStore();
+  return <button onClick={increment}>{count}</button>;
+}
+```
+
+- 👍 매우 간결, Provider 불필요, 필요한 상태만 구독해 리렌더 최소화
+- 👎 Redux만큼 엄격한 규약·도구는 아님 (작은~중간 규모에 적합)
+
+## Jotai
+
+**아토믹(atomic)** 접근. 작은 상태 조각(atom)을 조합합니다. Recoil과 유사한 철학.
+
+```ts
+import { atom, useAtom } from "jotai";
+
+const countAtom = atom(0);
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom);
+  return <button onClick={() => setCount((c) => c + 1)}>{count}</button>;
+}
+```
+
+- 👍 atom 단위로 최소 리렌더, 파생 상태 구성이 자연스러움
+- 👎 상태가 잘게 쪼개져 큰 앱에선 구조 설계가 필요
+
+## 선택 기준
+
+| 상황 | 추천 |
+|---|---|
+| 테마·인증 등 거의 안 바뀌는 전역 값 | **Context** |
+| 크고 복잡, 엄격함·DevTools 필요 | **Redux Toolkit** |
+| 가볍고 빠르게, 보일러플레이트 최소 | **Zustand** |
+| 파생 상태가 많고 세밀한 리렌더 제어 | **Jotai** |
+| 서버에서 온 데이터 | **React Query** (상태관리 라이브러리 아님) |
+
+---
+
+가장 흔한 실수는 **모든 상태를 하나의 전역 스토어에** 넣는 것입니다. 상태를 **서버 상태 / 전역 클라이언트 상태 / 지역 UI 상태**로 나누고, 각각에 맞는 도구(React Query / 위 라이브러리 / `useState`)를 쓰는 것이 핵심입니다.

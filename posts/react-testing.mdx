@@ -1,0 +1,83 @@
+---
+title: "React Testing Library로 컴포넌트 테스트하기"
+description: "사용자 관점에서 컴포넌트를 검증하는 React Testing Library의 철학과 쿼리, 사용자 이벤트, 비동기 처리, 모킹을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "testing"
+tags: ["React", "테스트", "React Testing Library"]
+---
+
+[Jest](/posts/jest-testing)·[Vitest](/posts/vitest-testing)가 테스트 러너라면, **React Testing Library(RTL)** 는 리액트 컴포넌트를 **사용자 관점에서** 검증하도록 돕는 도구입니다.
+
+## 철학 — 구현이 아니라 동작을 테스트
+
+> "테스트가 소프트웨어를 사용하는 방식과 닮을수록, 그 테스트는 더 큰 신뢰를 준다."
+
+내부 state나 메서드가 아니라, **사용자가 보는 것(텍스트, 역할)** 과 **하는 것(클릭, 입력)** 을 기준으로 테스트합니다. 덕분에 리팩터링에 강한 테스트가 됩니다.
+
+## 기본 예제
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import Counter from "./Counter";
+
+test("버튼을 누르면 카운트가 증가한다", async () => {
+  render(<Counter />);
+
+  // 요소 찾기 — 역할(role)과 접근 가능한 이름으로
+  const button = screen.getByRole("button", { name: "증가" });
+  expect(screen.getByText("0")).toBeInTheDocument();
+
+  await userEvent.click(button);
+  expect(screen.getByText("1")).toBeInTheDocument();
+});
+```
+
+## 쿼리 우선순위
+
+요소를 찾을 때는 **접근성에 가까운 쿼리를 우선**합니다.
+
+1. `getByRole` (가장 권장 — 버튼, 제목 등)
+2. `getByLabelText` (폼 입력)
+3. `getByText` (일반 텍스트)
+4. `getByTestId` (최후의 수단)
+
+쿼리 종류:
+- **`getBy…`**: 없으면 에러 (존재 단언)
+- **`queryBy…`**: 없으면 `null` (부재 단언에 사용)
+- **`findBy…`**: Promise 반환 (비동기로 나타나는 요소)
+
+## 비동기 처리
+
+데이터 로딩처럼 나중에 나타나는 요소는 `findBy` 또는 `waitFor`로 기다립니다.
+
+```tsx
+test("데이터를 불러와 보여준다", async () => {
+  render(<UserProfile id={1} />);
+  expect(screen.getByText("로딩 중…")).toBeInTheDocument();
+
+  // 나타날 때까지 대기
+  expect(await screen.findByText("형기")).toBeInTheDocument();
+});
+```
+
+## 네트워크 모킹 (MSW)
+
+실제 API 대신 **MSW(Mock Service Worker)** 로 네트워크 레벨에서 응답을 가로채면, 컴포넌트 코드를 바꾸지 않고 테스트할 수 있습니다.
+
+```ts
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
+
+const server = setupServer(
+  http.get("/api/users/1", () => HttpResponse.json({ name: "형기" })),
+);
+
+beforeAll(() => server.listen());
+afterAll(() => server.close());
+```
+
+---
+
+핵심은 "**사용자가 화면에서 무엇을 보고, 무엇을 하는가**"로 테스트를 작성하는 것입니다. `getByRole` 중심으로 쓰면 접근성도 자연스럽게 챙기게 됩니다.

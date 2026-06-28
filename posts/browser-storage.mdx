@@ -1,0 +1,82 @@
+---
+title: "브라우저 저장소 — localStorage, sessionStorage, Cookie, IndexedDB"
+description: "웹에서 데이터를 저장하는 네 가지 수단의 용량·수명·접근 방식 차이와 사용 기준을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "javascript"
+tags: ["브라우저", "localStorage", "Cookie", "IndexedDB"]
+---
+
+브라우저에서 데이터를 저장하는 수단은 여러 가지이고, 각각 용량·수명·용도가 다릅니다. 비교해 봅니다.
+
+## 한눈에 보기
+
+| 저장소 | 용량 | 수명 | 서버 전송 | 주 용도 |
+|---|---|---|---|---|
+| **localStorage** | ~5MB | 영구(직접 삭제 전까지) | ❌ | 테마, 간단한 설정 |
+| **sessionStorage** | ~5MB | 탭이 닫히면 삭제 | ❌ | 일회성 폼 임시 저장 |
+| **Cookie** | ~4KB | 만료일까지 | ✅ 매 요청 자동 | 인증 토큰, 세션 |
+| **IndexedDB** | 수백 MB+ | 영구 | ❌ | 대용량·구조화 데이터, 오프라인 |
+
+## localStorage / sessionStorage
+
+문자열 키-값 저장소입니다. API가 동일하고, **수명만** 다릅니다.
+
+```javascript
+localStorage.setItem("theme", "dark");
+localStorage.getItem("theme"); // "dark"
+localStorage.removeItem("theme");
+
+// 객체는 직렬화해서 저장
+localStorage.setItem("user", JSON.stringify({ name: "형기" }));
+const user = JSON.parse(localStorage.getItem("user"));
+```
+
+- **동기 API**라 큰 데이터를 다루면 메인 스레드를 막을 수 있습니다.
+- **민감 정보(토큰)를 두지 마세요** — JavaScript로 접근 가능해 XSS에 취약합니다.
+
+## Cookie
+
+작은 데이터지만 **HTTP 요청에 자동으로 실려** 서버 인증에 쓰입니다.
+
+```javascript
+document.cookie = "lang=ko; max-age=3600; path=/";
+```
+
+보안 속성이 중요합니다.
+
+- **`HttpOnly`**: JavaScript에서 접근 불가 → XSS로 탈취 방지 (인증 토큰에 필수)
+- **`Secure`**: HTTPS에서만 전송
+- **`SameSite`**: 크로스 사이트 전송 제한 → [CSRF](/posts/web-security) 방어
+
+> 인증 토큰은 `localStorage`보다 **`HttpOnly` 쿠키**에 두는 것이 안전합니다.
+
+## IndexedDB
+
+브라우저에 내장된 **트랜잭션 기반 NoSQL 데이터베이스**입니다. 대용량·구조화 데이터, 오프라인 앱(PWA)에 적합합니다. 비동기 API라 메인 스레드를 막지 않습니다.
+
+원시 API는 장황해서, 보통 **`idb`** 같은 래퍼 라이브러리를 씁니다.
+
+```javascript
+import { openDB } from "idb";
+
+const db = await openDB("my-db", 1, {
+  upgrade(db) {
+    db.createObjectStore("posts", { keyPath: "id" });
+  },
+});
+
+await db.put("posts", { id: 1, title: "안녕" });
+const post = await db.get("posts", 1);
+```
+
+## 선택 기준
+
+- 간단한 설정·테마 → **localStorage**
+- 탭 단위 임시 데이터 → **sessionStorage**
+- 인증/세션 → **HttpOnly Cookie**
+- 대용량·오프라인·구조화 → **IndexedDB**
+
+---
+
+핵심은 "**민감 정보는 `HttpOnly` 쿠키, 그 외 가벼운 값은 Web Storage, 대용량은 IndexedDB**"입니다. 특히 토큰을 `localStorage`에 두는 흔한 실수는 [웹 보안](/posts/web-security) 관점에서 피하는 것이 좋습니다.

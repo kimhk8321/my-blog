@@ -1,0 +1,97 @@
+---
+title: "Next.js 데이터 패칭과 캐싱"
+description: "서버 컴포넌트에서의 fetch, 캐시와 재검증(revalidate), 동적 렌더링, 그리고 변경(Server Actions)까지 App Router의 데이터 흐름을 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "architecture"
+tags: ["Next.js", "데이터 패칭", "캐싱", "Server Actions"]
+---
+
+[App Router](/posts/nextjs-app-router)·[RSC](/posts/react-server-components)에 이어, Next.js에서 데이터를 가져오고 캐싱하는 방식을 정리합니다.
+
+## 서버 컴포넌트에서 fetch
+
+서버 컴포넌트는 `async`로 만들어 직접 `await fetch` 합니다. 클라이언트의 `useEffect` 패턴이 필요 없습니다.
+
+```tsx
+export default async function Page() {
+  const res = await fetch("https://api.example.com/posts");
+  const posts = await res.json();
+  return <PostList posts={posts} />;
+}
+```
+
+## 캐싱과 재검증
+
+Next.js는 `fetch` 결과를 캐싱합니다. 옵션으로 동작을 조절합니다.
+
+```tsx
+// 1) 기본 — 빌드 시 캐시 (정적, SSG처럼 동작)
+await fetch(url);
+
+// 2) 매 요청마다 새로 (캐시 안 함, SSR처럼 동작)
+await fetch(url, { cache: "no-store" });
+
+// 3) 주기적 재검증 (ISR처럼 동작) — 60초마다 백그라운드 갱신
+await fetch(url, { next: { revalidate: 60 } });
+```
+
+페이지 단위로도 설정할 수 있습니다.
+
+```tsx
+export const revalidate = 60; // 이 라우트의 기본 재검증 주기
+export const dynamic = "force-dynamic"; // 항상 동적 렌더링
+```
+
+> 이 캐싱 옵션들이 곧 [CSR/SSR/SSG/ISR](/posts/ssr-rendering) 전략을 **요청 단위로** 선택하는 수단입니다.
+
+## 태그 기반 재검증
+
+데이터를 변경한 뒤, 관련 캐시만 무효화할 수 있습니다.
+
+```tsx
+// 패칭 시 태그 부여
+await fetch(url, { next: { tags: ["posts"] } });
+
+// 변경 후 해당 태그 무효화
+import { revalidateTag } from "next/cache";
+revalidateTag("posts");
+```
+
+## Server Actions — 변경 처리
+
+폼 제출 같은 **데이터 변경**을 별도 API 라우트 없이 서버 함수로 처리합니다. 함수 상단에 `"use server"`를 붙입니다.
+
+```tsx
+// app/posts/actions.ts
+"use server";
+import { revalidatePath } from "next/cache";
+
+export async function createPost(formData: FormData) {
+  const title = formData.get("title");
+  await db.post.create({ data: { title } });
+  revalidatePath("/posts"); // 목록 페이지 캐시 갱신
+}
+```
+
+```tsx
+// 폼에서 직접 사용
+import { createPost } from "./actions";
+
+export default function NewPost() {
+  return (
+    <form action={createPost}>
+      <input name="title" />
+      <button type="submit">작성</button>
+    </form>
+  );
+}
+```
+
+## 클라이언트에서의 패칭
+
+상호작용 중 발생하는 패칭(무한 스크롤, 실시간 등)은 여전히 클라이언트에서 합니다. 이때는 [React Query](/posts/react-query)를 쓰면 캐싱·리페치를 깔끔하게 다룰 수 있습니다.
+
+---
+
+App Router의 데이터 흐름은 "**읽기는 서버 컴포넌트의 `fetch`, 캐싱은 옵션으로, 변경은 Server Actions**"로 요약됩니다. 캐시·재검증 옵션을 이해하면 정적의 속도와 동적의 신선함을 상황에 맞게 조합할 수 있습니다.

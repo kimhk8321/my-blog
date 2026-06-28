@@ -1,0 +1,94 @@
+---
+title: "Next.js App Router 기초"
+description: "파일 기반 라우팅, 레이아웃, 동적 라우트, 서버/클라이언트 컴포넌트 등 Next.js App Router의 핵심 구조를 정리합니다."
+date: "2026-06-28"
+migrated: true
+category: "react"
+tags: ["Next.js", "App Router", "React"]
+---
+
+Next.js의 **App Router**(`app/` 디렉터리)는 폴더 구조가 곧 URL이 되는 파일 기반 라우팅과, 서버 컴포넌트를 중심으로 한 렌더링 모델을 제공합니다. (이 블로그도 App Router로 만들어졌습니다.)
+
+## 파일 기반 라우팅
+
+`app/` 아래 폴더가 경로, `page.tsx`가 해당 경로의 화면이 됩니다.
+
+```
+app/
+  page.tsx          → /
+  about/page.tsx    → /about
+  posts/
+    page.tsx        → /posts
+    [slug]/page.tsx → /posts/:slug
+```
+
+## 특수 파일
+
+- **`layout.tsx`**: 하위 페이지를 감싸는 공통 레이아웃. 페이지 전환 시 **유지**됩니다(상태 보존).
+- **`loading.tsx`**: 해당 구간 로딩 중 보여줄 UI (Suspense 기반).
+- **`error.tsx`**: 에러 바운더리 (클라이언트 컴포넌트여야 함).
+- **`not-found.tsx`**: 404 화면.
+
+```tsx
+// app/layout.tsx — 루트 레이아웃 (html/body 포함)
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ko">
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+## 동적 라우트
+
+`[param]` 폴더로 동적 세그먼트를 만들고, 페이지에서 `params`로 받습니다. (Next 15+에서 `params`는 Promise라 `await` 합니다.)
+
+```tsx
+// app/posts/[slug]/page.tsx
+export default async function PostPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  return <h1>{slug}</h1>;
+}
+```
+
+빌드 시 정적 생성할 경로는 `generateStaticParams`로 알려줍니다.
+
+```tsx
+export function generateStaticParams() {
+  return [{ slug: "hello" }, { slug: "world" }];
+}
+```
+
+## 서버 컴포넌트 vs 클라이언트 컴포넌트
+
+App Router의 컴포넌트는 **기본적으로 서버 컴포넌트**입니다. 상호작용(상태·이벤트·브라우저 API)이 필요한 컴포넌트만 파일 상단에 `"use client"`를 붙입니다.
+
+```tsx
+"use client";
+import { useState } from "react";
+
+export function Counter() {
+  const [n, setN] = useState(0);
+  return <button onClick={() => setN(n + 1)}>{n}</button>;
+}
+```
+
+- **서버 컴포넌트**: 데이터 패칭, 비밀키 사용, 번들 절감에 유리 (브라우저 JS로 전송 안 됨)
+- **클라이언트 컴포넌트**: `useState`/`useEffect`/이벤트 핸들러가 필요할 때
+
+이 서버/클라이언트 구분은 다음 [Server Components 편](/posts/react-server-components)에서 더 깊이 다룹니다.
+
+## 메타데이터
+
+```tsx
+export const metadata = { title: "소개", description: "about 페이지" };
+```
+
+---
+
+App Router의 핵심은 "**폴더가 URL이고, 컴포넌트는 기본이 서버**"라는 두 가지입니다. 이 모델을 이해하면 [SSR/SSG 같은 렌더링 전략](/posts/ssr-rendering)을 컴포넌트 단위로 유연하게 적용할 수 있습니다.
