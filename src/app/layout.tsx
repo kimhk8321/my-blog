@@ -67,7 +67,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <header className="border-b border-black/10 dark:border-white/10">
+        <header className="sticky top-0 z-40 bg-background border-b border-black/10 dark:border-white/10">
           <div className="px-6 py-5 flex items-center justify-between">
             <Link href="/" className="font-semibold tracking-tight">
               {siteConfig.name}
@@ -95,7 +95,7 @@ export default function RootLayout({
 
         <div className="flex flex-1">
           <aside className="hidden lg:block w-60 shrink-0 border-r border-black/10 dark:border-white/10">
-            <div className="sticky top-6 p-6">
+            <div className="sticky top-20 p-6">
               <CategorySidebar items={sidebarItems} />
             </div>
           </aside>
@@ -104,7 +104,7 @@ export default function RootLayout({
           </main>
         </div>
 
-        <footer className="border-t border-black/10 dark:border-white/10">
+        <footer className="sticky bottom-0 z-40 bg-background border-t border-black/10 dark:border-white/10">
           <div className="px-6 py-6 text-sm text-foreground/60 flex items-center justify-between">
             <span>
               © {new Date().getFullYear()} {siteConfig.author.name}
