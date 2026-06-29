@@ -106,7 +106,7 @@ export default async function PostPage({ params }: PageProps) {
           source={post.content}
           options={{
             mdxOptions: {
-              remarkPlugins: [remarkGfm],
+              remarkPlugins: [[remarkGfm, { singleTilde: false }]],
               rehypePlugins: [rehypeSlug, rehypeHighlight],
             },
           }}
