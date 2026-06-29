@@ -92,6 +92,19 @@ export function getPostsByTag(tag: string): PostMeta[] {
   return getAllPosts().filter((post) => (post.tags ?? []).includes(tag));
 }
 
+export function getAdjacentPosts(slug: string): {
+  newer: PostMeta | null;
+  older: PostMeta | null;
+} {
+  const posts = getAllPosts();
+  const index = posts.findIndex((post) => post.slug === slug);
+  if (index === -1) return { newer: null, older: null };
+  return {
+    newer: index > 0 ? posts[index - 1] : null,
+    older: index < posts.length - 1 ? posts[index + 1] : null,
+  };
+}
+
 export function getPostsByCategory(categoryId: string): PostMeta[] {
   return getAllPosts().filter((post) => post.category === categoryId);
 }

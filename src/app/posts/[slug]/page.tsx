@@ -5,10 +5,15 @@ import { MDXRemote } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import rehypeHighlight from "rehype-highlight";
-import { getAllPostSlugs, getPostBySlug } from "@/lib/posts";
+import {
+  getAllPostSlugs,
+  getPostBySlug,
+  getAdjacentPosts,
+} from "@/lib/posts";
 import { formatDate } from "@/lib/format";
 import { getCategoryById } from "@/lib/categories";
 import { TagList } from "@/components/tag-list";
+import { PostNav } from "@/components/post-nav";
 import { Comments } from "@/components/comments";
 
 interface PageProps {
@@ -54,6 +59,7 @@ export default async function PostPage({ params }: PageProps) {
   if (!post) notFound();
 
   const category = post.category ? getCategoryById(post.category) : undefined;
+  const { newer, older } = getAdjacentPosts(slug);
 
   return (
     <article>
@@ -106,6 +112,8 @@ export default async function PostPage({ params }: PageProps) {
           }}
         />
       </div>
+
+      <PostNav older={older} newer={newer} />
 
       <Comments />
     </article>
