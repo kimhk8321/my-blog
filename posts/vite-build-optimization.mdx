@@ -9,6 +9,8 @@ tags: ["Vite", "빌드 최적화", "React", "번들링"]
 
 Vite 기반 React 프로젝트에서 번들 크기와 빌드 속도를 개선하는 방법을 영역별로 정리합니다.
 
+> 이 글은 **Vite 빌드 설정**에 집중합니다. 런타임 렌더링 최적화(코드 스플리팅, `React.memo`·`useMemo`, 리스트 가상화 등)와 성능 측정은 [프론트엔드 성능 최적화 정리](/posts/frontend-performance-optimization)에서 다룹니다.
+
 ## 1. Vite 설정 최적화
 
 ### Esbuild / Terser
@@ -55,28 +57,7 @@ export default defineConfig({
 });
 ```
 
-## 2. React / TypeScript
-
-### 코드 스플리팅
-
-`React.lazy`와 `Suspense`로 필요한 시점에만 컴포넌트를 불러옵니다.
-
-```tsx
-import { Suspense, lazy } from "react";
-const LazyComponent = lazy(() => import("./LazyComponent"));
-
-const App = () => (
-  <Suspense fallback={<div>Loading...</div>}>
-    <LazyComponent />
-  </Suspense>
-);
-```
-
-`React.memo`로 불필요한 재렌더링을 막습니다.
-
-```tsx
-const MyComponent = React.memo(({ data }: { data: string }) => <div>{data}</div>);
-```
+## 2. TypeScript 설정
 
 ### tsconfig 최적화
 
