@@ -34,6 +34,10 @@ export function sortPosts<T extends PostMeta>(
   return arr.sort((a, b) => {
     const byDate = dir * (+new Date(b.date) - +new Date(a.date));
     if (byDate !== 0) return byDate;
+    // 같은 날짜: order로 순서 지정. 최신순이면 큰(최신) order가 위로.
+    if (a.order != null || b.order != null) {
+      return dir * ((b.order ?? 0) - (a.order ?? 0));
+    }
     const byCategory = categoryRank(a.category) - categoryRank(b.category);
     if (byCategory !== 0) return byCategory;
     // 최신순은 (10), 오래된순은 (1)이 위로

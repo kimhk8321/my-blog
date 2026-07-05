@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { siteConfig, siteUrl } from "@/lib/site";
@@ -66,7 +67,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <Script id="theme-init" strategy="beforeInteractive">
+          {themeScript}
+        </Script>
         <header className="sticky top-0 z-40 bg-background border-b border-black/10 dark:border-white/10">
           <div className="px-6 py-5 flex items-center justify-between">
             <Link href="/" className="font-semibold tracking-tight">
@@ -100,7 +103,7 @@ export default function RootLayout({
             </div>
           </aside>
           <main className="min-w-0 flex-1">
-            <div className="mx-auto max-w-3xl px-6 py-12">{children}</div>
+            <div className="mx-auto max-w-4xl px-6 py-12">{children}</div>
           </main>
         </div>
 

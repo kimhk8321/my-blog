@@ -73,3 +73,27 @@ body {
 .hljs-strong {
   font-weight: 700;
 }
+
+/* 코드블록 가로 스크롤바 — 얇고 둥글게, 은은하게 */
+.prose pre,
+.hljs {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+.prose pre::-webkit-scrollbar,
+.hljs::-webkit-scrollbar {
+  height: 8px;
+}
+.prose pre::-webkit-scrollbar-track,
+.hljs::-webkit-scrollbar-track {
+  background: transparent;
+}
+.prose pre::-webkit-scrollbar-thumb,
+.hljs::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+.prose pre:hover::-webkit-scrollbar-thumb,
+.hljs:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.55);
+}

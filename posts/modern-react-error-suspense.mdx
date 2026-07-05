@@ -43,6 +43,10 @@ class ErrorBoundary extends Component {
 - Error Boundary는 아직 **클래스 컴포넌트로만** 만들 수 있습니다(또는 `react-error-boundary` 라이브러리 사용).
 - 단, **이벤트 핸들러 내부의 에러**나 **비동기 에러**는 잡지 못합니다(그건 `try/catch`로 처리).
 
+<Demo title="Error Boundary — 렌더 에러 잡기">
+  <ErrorBoundaryDemo />
+</Demo>
+
 ## Suspense — 비동기 로딩을 선언적으로
 
 `Suspense`는 자식이 준비될 때까지 **fallback UI**를 보여줍니다. 로딩 상태를 `if (loading)`로 흩뿌리지 않고 한곳에서 선언합니다.

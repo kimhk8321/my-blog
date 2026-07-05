@@ -1,0 +1,119 @@
+---
+title: "React 훅은 어떻게 동작하는가 — useState·useEffect 직접 구현하기"
+description: "훅은 마법이 아니다. slots 배열과 cursor만으로 useState·useEffect를 직접 만들어 보며, '훅 규칙'이 왜 존재하는지 원리로 이해합니다."
+date: "2026-07-05"
+category: "react"
+order: 1
+tags: ["React", "Hooks", "원리", "구현"]
+---
+
+> 📌 지금까지 올라온 기본기 글들은 예전 학습 노트를 정리해 옮긴 **이관 기록**이었습니다. 이관을 마무리하고, 이 글부터는 **직접 코드를 작성하며 쓰는 첫 게시글**입니다. 앞으로는 원리를 파고들며 실제로 동작하는 데모를 곁들일 예정입니다.
+
+`useState`를 쓰다 보면 한 번쯤 궁금해집니다. **"컴포넌트는 매번 처음부터 다시 실행되는데, 어떻게 이전 상태를 기억하지?"** 그리고 왜 하필 "훅은 최상위에서만, 조건문 안에서 부르지 말라"는 규칙이 붙을까요?
+
+이 글에서는 **100줄도 안 되는 미니 훅 엔진**을 직접 만들며 그 답을 찾습니다. 핵심 아이디어는 딱 두 개 — **배열(slots)** 과 **커서(cursor)** 입니다.
+
+## 문제: 함수는 상태를 기억하지 못한다
+
+컴포넌트는 그냥 함수입니다. 리렌더 = 함수 재호출입니다. 지역 변수는 매번 초기화되죠.
+
+```jsx
+function Counter() {
+  let count = 0; // 매 렌더마다 0으로 초기화 → 상태를 기억 못 함
+  return <button onClick={() => count++}>{count}</button>;
+}
+```
+
+그래서 상태는 **컴포넌트 함수 바깥**에 저장되어야 합니다. React는 이걸 컴포넌트 인스턴스에 딸린 별도 저장소에 둡니다. 우리는 그 저장소를 간단히 **배열**로 흉내 냅니다.
+
+## useState 미니 구현
+
+`slots` 배열에 상태를 순서대로 쌓고, `cursor`로 "지금 몇 번째 훅인지"를 추적합니다.
+
+```js
+function createHookEngine(rerender) {
+  const slots = []; // 훅 상태 저장소
+  let cursor = 0;   // 이번 렌더에서 몇 번째 훅인가
+
+  function useState(initial) {
+    const i = cursor++;                       // 이 훅의 고정 자리
+    if (i >= slots.length) slots[i] = initial; // 최초 렌더에만 초기화
+
+    const setState = (v) => {
+      slots[i] = typeof v === "function" ? v(slots[i]) : v;
+      rerender(); // 다시 렌더 → 컴포넌트 함수 재실행
+    };
+
+    return [slots[i], setState];
+  }
+
+  return { useState, reset: () => (cursor = 0), slots };
+}
+```
+
+포인트는 **`i = cursor++`** 입니다. 첫 번째 `useState`는 항상 `slots[0]`, 두 번째는 `slots[1]`… **호출 순서가 곧 저장 위치**입니다. 매 렌더 시작 시 `reset()`으로 커서를 0으로 되돌리면, 같은 순서로 호출되는 한 각 훅은 자기 자리를 정확히 되찾습니다.
+
+## 직접 만든 useState로 동작하는 데모
+
+아래는 방금 만든 엔진의 `useState`**만** 사용해 만든 카운터입니다. React의 `useState`는 쓰지 않았습니다. 버튼을 눌러 보고, 아래 `slots` 배열이 어떻게 바뀌는지 보세요.
+
+<Demo title="직접 만든 useState로 동작하는 카운터">
+  <MiniHooksDemo />
+</Demo>
+
+`+1`을 누르면 `setState` → `slots[0]` 갱신 → `rerender()` → 컴포넌트 재실행 → `reset()` 후 같은 순서로 `useState`가 호출되어 갱신된 값을 읽어옵니다. 입력창(`slots[1]`)도 같은 원리입니다.
+
+## 그래서 "훅 규칙"이 존재한다
+
+이제 왜 **조건문 안에서 훅을 부르면 안 되는지**가 자명해집니다. 커서는 순서에만 의존하니까요.
+
+```js
+function Component() {
+  const [a, setA] = useState(1); // slots[0]
+  if (someCondition) {
+    const [b, setB] = useState(2); // 어떤 렌더엔 slots[1], 어떤 렌더엔 건너뜀!
+  }
+  const [c, setC] = useState(3); // slots[1]? slots[2]? → 자리가 어긋난다
+}
+```
+
+`someCondition`이 렌더마다 달라지면 `c`가 읽는 슬롯이 밀립니다. **상태가 엉뚱한 훅에게 넘어가는** 것이죠. "훅은 항상 최상위에서, 같은 순서로"라는 규칙은 **커서 정렬을 깨지 않기 위한** 것입니다.
+
+## useEffect 미니 구현
+
+`useEffect`도 같은 slots 구조 위에 얹습니다. 다만 저장하는 것은 값이 아니라 **이전 의존성 배열**입니다. 이전과 비교해 바뀌었을 때만 이펙트를 실행합니다.
+
+```js
+function useEffect(effect, deps) {
+  const i = cursor++;
+  const prev = slots[i];
+
+  const changed =
+    !prev || !deps || deps.some((d, idx) => !Object.is(d, prev.deps[idx]));
+
+  if (changed) {
+    prev?.cleanup?.();          // 이전 정리 함수 실행
+    const cleanup = effect();   // 새 이펙트 실행 → 정리 함수 반환
+    slots[i] = { deps, cleanup };
+  }
+}
+```
+
+- `deps`가 없으면 매번 실행, `[]`면 최초 1회, `[x]`면 `x`가 바뀔 때만 — 우리가 아는 그 동작입니다.
+- `Object.is`로 얕게 비교하기 때문에, 객체·배열을 deps에 넣으면 매번 "바뀐 것"으로 보이는 흔한 함정도 여기서 설명됩니다.
+
+## 실제 React와 무엇이 다른가
+
+미니 엔진은 본질을 담았지만, 진짜 React는 더 정교합니다.
+
+- **컴포넌트마다 독립된 훅 목록**: 우리는 엔진 하나에 slots 하나였지만, React는 각 컴포넌트 인스턴스(Fiber 노드)마다 훅 목록을 따로 가집니다. 그래서 수천 개의 컴포넌트가 서로 상태를 침범하지 않습니다.
+- **배열이 아니라 연결 리스트**: React 내부에서 훅은 `memoizedState`를 필드로 갖는 **연결 리스트**로 이어집니다(개념은 "순서대로 저장"으로 동일).
+- **스케줄링**: `setState`가 즉시 동기로 다시 그리지 않고, 업데이트를 큐에 넣어 배치·우선순위 처리합니다([이벤트 루프](/posts/js-deep-dive-async)·동시성 렌더링과 연결됩니다).
+
+하지만 "**상태를 함수 바깥 슬롯에 순서대로 저장하고, 렌더마다 커서로 되짚는다**"는 뼈대는 정확히 같습니다.
+
+## 마무리
+
+훅이 대단한 마법처럼 느껴졌다면, 실은 클로저와 배열, 호출 순서가 전부였던 셈입니다. 이 구조가 눈에 들어오고 나면 "훅은 최상위에서 같은 순서로"라는 규칙도 외울 대상이 아니라 그냥 당연한 이야기가 되고, `useEffect`의 [얕은 의존성 비교](/posts/modern-react-hooks)나 커스텀 훅의 정체도 덤으로 이해됩니다.
+
+이 발상을 조금만 더 밀어붙이면 상태를 아예 React 바깥에 둘 수도 있습니다. 다음 글에서 `useSyncExternalStore`로 작은 상태관리 라이브러리를 직접 만들어 볼게요.

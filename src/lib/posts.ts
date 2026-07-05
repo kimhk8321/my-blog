@@ -14,6 +14,8 @@ export interface PostFrontmatter {
   tags?: string[];
   draft?: boolean;
   migrated?: boolean;
+  /** 같은 날짜 글의 순서(먼저 쓴 순으로 1,2,3…). 최신순에서 큰 값(최신 글)이 위로. */
+  order?: number;
 }
 
 export interface PostMeta extends PostFrontmatter {
@@ -57,6 +59,7 @@ export function getPostBySlug(slug: string): Post | null {
     tags: fm.tags ?? [],
     draft: fm.draft ?? false,
     migrated: fm.migrated ?? false,
+    order: fm.order,
     content,
   };
 }

@@ -1,0 +1,90 @@
+---
+title: "동시성 렌더링 — useTransition과 useDeferredValue"
+description: "무거운 렌더링이 입력을 막지 않도록, React 18 동시성 기능(useTransition·useDeferredValue)으로 UI 반응성을 지키는 법을 라이브 데모와 함께 정리합니다."
+date: "2026-07-05"
+category: "performance"
+order: 4
+tags: ["React", "동시성", "useTransition", "성능"]
+---
+
+[리스트 가상화](/posts/virtual-list-windowing)로 "안 보이는 건 안 그린다"를 배웠습니다. 그런데 화면에 실제로 그려야 할 게 많아 렌더 자체가 무거우면요? 검색어를 한 글자 칠 때마다 수천 개 항목을 다시 그리면 입력이 버벅입니다. React 18의 **동시성 렌더링**은 "급한 일(입력)"과 "덜 급한 일(목록 갱신)"을 구분해 이 문제를 풉니다.
+
+## 문제 — 모든 업데이트가 동등하게 급하지 않다
+
+기본적으로 React의 상태 업데이트는 **동기적**이고 중단할 수 없습니다. 그래서 무거운 렌더가 진행되는 동안 입력 이벤트 처리가 밀립니다. 하지만 사용자 관점에서:
+
+- **입력값 반영** = 급함(즉시 보여야 함)
+- **거대한 결과 목록 갱신** = 덜 급함(조금 늦어도 됨)
+
+동시성 기능은 후자를 **낮은 우선순위**로 미루고, 그 사이 급한 렌더를 먼저 처리합니다. 필요하면 진행 중인 렌더를 **중단**했다가 재개합니다.
+
+## useDeferredValue
+
+값의 "지연된 버전"을 만듭니다. 급한 렌더에는 최신 값을, 무거운 렌더에는 지연된 값을 씁니다.
+
+```jsx
+function Search() {
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query); // 지연된 값
+
+  return (
+    <>
+      <input value={query} onChange={(e) => setQuery(e.target.value)} />
+      {/* 무거운 목록은 deferredQuery로 → 입력은 즉시, 목록은 뒤늦게 */}
+      <HeavyList query={deferredQuery} />
+    </>
+  );
+}
+```
+
+`query`는 즉시 갱신되어 입력이 매끄럽고, `HeavyList`는 `deferredQuery`가 따라잡을 때 갱신됩니다. `query !== deferredQuery`이면 "갱신 중"임을 알 수 있습니다.
+
+## 라이브 데모
+
+아래 입력창에 숫자를 **빠르게** 쳐보세요. 무거운 목록(최대 800행)이 매 입력마다 다시 렌더됩니다. 체크박스로 `useDeferredValue`를 껐다 켜며 입력 반응성을 비교해 보세요.
+
+<Demo title="useDeferredValue — 입력은 즉시, 무거운 목록은 지연">
+  <ConcurrentSearchDemo />
+</Demo>
+
+체크를 끄면(입력값 직접 사용) 목록 렌더가 입력을 막아 버벅일 수 있고, 켜면 입력값(즉시)과 목록 기준값(지연)이 잠깐 달라지며 입력이 매끄럽게 유지됩니다.
+
+## useTransition
+
+값이 아니라 **상태 업데이트 자체**를 "전환(transition)"으로 표시해 낮은 우선순위로 만듭니다. 진행 상태(`isPending`)도 줍니다.
+
+```jsx
+function Tabs() {
+  const [isPending, startTransition] = useTransition();
+  const [tab, setTab] = useState("home");
+
+  function selectTab(next) {
+    startTransition(() => {
+      setTab(next); // 이 업데이트는 급하지 않음 → 중단 가능
+    });
+  }
+
+  return (
+    <>
+      <button onClick={() => selectTab("heavy")}>무거운 탭</button>
+      {isPending && <Spinner />}
+      <TabContent tab={tab} />
+    </>
+  );
+}
+```
+
+- **`useDeferredValue`**: 내가 값을 직접 만들지 않을 때(예: props로 받은 값)나, 값 기반으로 미룰 때.
+- **`useTransition`**: 내가 일으키는 상태 전환을 미루고 `isPending`으로 로딩 표시가 필요할 때.
+
+## 원리 — 중단 가능한 렌더
+
+동시성 렌더링의 핵심은 렌더가 **중단(interruptible)** 가능해졌다는 점입니다. React는 낮은 우선순위 렌더를 잘게 쪼개 진행하다가, 급한 입력이 들어오면 **하던 걸 버리고** 급한 렌더를 먼저 처리한 뒤 다시 시작합니다. [지난 훅 글](/posts/how-react-hooks-work)에서 "setState는 즉시 동기로 그리지 않고 스케줄링한다"고 했던 것이 바로 이 기반입니다.
+
+> ⚠️ 동시성은 "빠르게" 만들어 주는 게 아니라 "**반응성**"을 지켜주는 것입니다. 렌더 총량이 주는 건 아니므로, 진짜 무거운 목록은 [가상화](/posts/virtual-list-windowing)와 [메모이제이션](/posts/modern-react-hooks)을 함께 써야 합니다.
+
+## 마무리
+
+포인트는 하나입니다 — 모든 업데이트가 똑같이 급하진 않다는 것. 급한 입력은 즉시 반영하고 무거운 목록 갱신은 `useDeferredValue`나 `useTransition`으로 뒤로 미루면 됩니다. 이게 가능한 건 React 18부터 렌더링이 중간에 멈췄다 이어질 수 있게 바뀐 덕분이고요.
+
+다음 글에서는 React가 이렇게 만든 렌더 결과를 실제 DOM에 반영하는 과정, 그러니까 가상 DOM과 재조정을 들여다봅니다.
