@@ -72,6 +72,10 @@ function ThemeButton() {
 }
 ```
 
+<Demo title="Context — props 없이 값 전파">
+  <ContextThemeDemo />
+</Demo>
+
 ## 주의할 점
 
 - **불필요한 리렌더링**: Provider의 `value`가 바뀌면 이를 구독하는 모든 컴포넌트가 리렌더링됩니다. 자주 바뀌는 값과 거의 안 바뀌는 값은 **Context를 분리**하거나, `value`를 `useMemo`로 메모이즈하는 것이 좋습니다.

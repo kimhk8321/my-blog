@@ -1,0 +1,77 @@
+---
+title: "리스트 가상화(windowing) 직접 구현하기"
+description: "수만 개의 행을 부드럽게 렌더링하는 리스트 가상화의 원리를, scrollTop 계산만으로 직접 구현하며 라이브 데모로 확인합니다."
+date: "2026-07-05"
+category: "performance"
+order: 3
+tags: ["React", "성능", "가상화", "구현"]
+---
+
+[상태관리 라이브러리](/posts/build-state-library)에 이어, 이번엔 렌더링 성능입니다. 10,000개의 행을 그대로 렌더하면 어떻게 될까요? DOM 노드 1만 개가 생기고, 스크롤은 버벅이며, 메모리는 치솟습니다. **가상화(virtualization, windowing)** 는 "**화면에 보이는 것만 그린다**"는 단순한 아이디어로 이 문제를 해결합니다.
+
+## 핵심 아이디어
+
+1. 전체 높이만큼의 **빈 공간(spacer)** 을 만들어 스크롤바는 "1만 개가 있는 것처럼" 보이게 한다.
+2. 실제로는 **현재 스크롤 위치에서 보이는 행만** 계산해 렌더한다.
+3. 각 행을 `position: absolute; top`으로 제자리에 놓는다.
+
+즉 DOM 노드 수를 `O(전체)` 에서 `O(화면에 보이는 수)` 로 줄이는 것입니다.
+
+## 계산은 산수 세 줄
+
+행 높이가 고정이라면, 스크롤 위치만 알면 어떤 행이 보이는지 바로 계산됩니다.
+
+```js
+const ROW_H = 32;      // 행 높이
+const VIEW_H = 240;    // 스크롤 영역 높이
+const OVERSCAN = 4;    // 위아래 여유 행 (스크롤 시 빈칸 방지)
+
+const start = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
+const end = Math.min(TOTAL, Math.ceil((scrollTop + VIEW_H) / ROW_H) + OVERSCAN);
+// start ~ end 사이의 행만 렌더한다
+```
+
+- `scrollTop / ROW_H` → 지금 맨 위에 보이는 행의 인덱스.
+- `VIEW_H / ROW_H` → 화면에 들어가는 행 개수.
+- **overscan**: 보이는 범위보다 몇 행 더 그려, 빠르게 스크롤할 때 빈 칸이 보이는 걸 막습니다.
+
+## 마크업 구조
+
+```jsx
+<div onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+     style={{ height: VIEW_H, overflow: "auto" }}>
+  {/* 전체 높이 확보 → 스크롤바 생성 */}
+  <div style={{ height: TOTAL * ROW_H, position: "relative" }}>
+    {visibleRows.map((i) => (
+      <div key={i} style={{ position: "absolute", top: i * ROW_H, height: ROW_H }}>
+        Row #{i}
+      </div>
+    ))}
+  </div>
+</div>
+```
+
+바깥 `div`가 스크롤을 담당하고, 안쪽 `div`가 전체 높이를 차지해 스크롤바를 만들며, 보이는 행들만 절대 위치로 얹힙니다.
+
+## 라이브 데모
+
+아래는 위 원리를 그대로 구현한 것입니다. **1만 행**이지만, 스크롤하며 "실제 DOM에 그려진 행" 수를 보세요 — 늘 십여 개뿐입니다.
+
+<Demo title="1만 행 가상 리스트 — 실제 DOM 노드는 십여 개">
+  <VirtualListDemo />
+</Demo>
+
+스크롤할 때마다 `scrollTop`이 바뀌고 → `start`/`end`가 다시 계산되고 → 그 구간의 행만 렌더됩니다. 스크롤바가 1만 행 분량인 이유는 안쪽 div의 높이(`TOTAL * ROW_H`)가 320,000px이기 때문입니다.
+
+## 한계와 실무
+
+- **가변 높이**: 행 높이가 제각각이면 `i * ROW_H` 공식이 깨집니다. 실제 높이를 **측정·누적**하거나, 추정 후 렌더 뒤 보정하는 방식이 필요합니다.
+- **가로 가상화**, 스크롤 복원, 동적 데이터 등 엣지 케이스가 많습니다.
+
+그래서 실무에서는 직접 만들기보다 **[@tanstack/react-virtual](https://tanstack.com/virtual)** 이나 `react-window`를 씁니다. 다만 이 라이브러리들도 방금 본 **"scrollTop으로 보이는 구간을 계산한다"** 는 원리는 동일합니다.
+
+## 마무리
+
+가상화라고 하면 거창해 보이지만, 실제로 하는 일은 스크롤 높이를 spacer로 확보해 두고 보이는 구간만 계산해서 그리는 산수에 가깝습니다. 여기에 overscan으로 여유만 조금 주면 끝이고요.
+
+DOM 노드 하나하나가 [렌더 비용](/posts/js-deep-dive-browser-rendering)이라는 걸 떠올리면 "안 보이는 건 안 그린다"가 왜 그렇게 강력한지 감이 옵니다. 다음 글에서는 반대 상황 — 화면에 꼭 그려야 할 게 많을 때 쓰는 동시성 렌더링을 다룹니다.

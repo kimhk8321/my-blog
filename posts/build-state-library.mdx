@@ -1,0 +1,106 @@
+---
+title: "useSyncExternalStore로 상태관리 라이브러리 만들기"
+description: "40줄짜리 스토어와 useSyncExternalStore로 Zustand 같은 상태관리를 직접 구현하며, 선택적 구독·tearing 방지·SSR 안전성의 원리를 이해합니다."
+date: "2026-07-05"
+category: "state-management"
+order: 2
+tags: ["React", "상태관리", "useSyncExternalStore", "구현"]
+---
+
+[지난 글](/posts/how-react-hooks-work)에서 훅이 "함수 바깥 슬롯에 상태를 저장한다"는 걸 봤습니다. 그렇다면 상태를 아예 **React 바깥의 스토어**에 두고, 필요한 컴포넌트만 구독하게 하면 어떨까요? [Zustand](/posts/state-management-comparison)가 바로 그 방식입니다. 이번엔 그걸 직접 만들어 봅니다.
+
+## 왜 Context로는 부족한가
+
+[Context](/posts/react-context-api)는 훌륭하지만, **value가 바뀌면 구독하는 모든 컴포넌트가 리렌더**됩니다. 전역 상태의 아주 작은 조각만 바뀌어도 관련 없는 컴포넌트까지 다시 그려지죠. 우리가 원하는 건 **"내가 보는 조각이 바뀔 때만"** 리렌더되는 **선택적 구독**입니다.
+
+## 1. React와 무관한 스토어
+
+먼저 순수 자바스크립트로 스토어를 만듭니다. 상태를 담고, 바뀌면 구독자에게 알립니다 — [옵저버 패턴](/posts/gof-design-patterns)입니다.
+
+```js
+function createStore(initial) {
+  let state = initial;
+  const listeners = new Set();
+
+  return {
+    getState: () => state,
+    setState: (partial) => {
+      const next = typeof partial === "function" ? partial(state) : partial;
+      state = { ...state, ...next };
+      listeners.forEach((l) => l()); // 변경 통지
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener); // 구독 해지
+    },
+  };
+}
+
+const store = createStore({ count: 0, step: 1 });
+```
+
+여기까지는 React가 전혀 없습니다. 이제 이걸 React에 **연결**해야 합니다.
+
+## 2. useSyncExternalStore로 연결
+
+React 18이 추가한 `useSyncExternalStore`는 **외부 스토어를 안전하게 구독**하기 위한 공식 훅입니다. 세 개의 인자를 받습니다.
+
+```js
+useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+```
+
+- **`subscribe(listener)`**: 스토어에 리스너를 등록(변경 시 React가 다시 읽음).
+- **`getSnapshot()`**: 현재 값을 반환. 값이 바뀌면 React가 리렌더.
+- **`getServerSnapshot()`**: SSR 시 서버에서 쓸 초기 값.
+
+이 위에 **selector**를 얹으면 원하는 조각만 구독하는 훅이 완성됩니다.
+
+```js
+function useStore(selector) {
+  const getSnapshot = () => selector(store.getState());
+  return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
+}
+```
+
+끝입니다. 사용법은 Zustand와 똑같습니다.
+
+```jsx
+function Counter() {
+  const count = useStore((s) => s.count); // count만 구독
+  return <button onClick={() => store.setState((s) => ({ count: s.count + 1 }))}>{count}</button>;
+}
+```
+
+## 3. 직접 만든 스토어로 도는 데모
+
+아래 두 박스는 **같은 스토어**를 구독하지만, 하나는 `count`만, 다른 하나는 `step`만 봅니다. `+ step`으로 count를 바꿔 보세요 — **count 박스만 리렌더되어 초록으로 반짝이고**, step 박스는 반응하지 않습니다. 이것이 Context에 없는 **선택적 구독**입니다.
+
+<Demo title="직접 만든 useStore로 동작하는 선택적 구독">
+  <MiniStoreDemo />
+</Demo>
+
+`setState`가 모든 리스너를 호출해도, 각 컴포넌트의 `getSnapshot`이 반환한 값(`count` 또는 `step`)이 **이전과 같으면 React는 리렌더하지 않습니다.** `useSyncExternalStore`가 스냅샷을 `Object.is`로 비교하기 때문입니다.
+
+> ⚠️ 그래서 **selector가 매번 새 객체를 반환하면 안 됩니다.** `(s) => ({ a: s.a })`처럼 객체를 새로 만들면 매 렌더마다 "바뀐 것"으로 보여 무한 리렌더/경고가 납니다. 조각(원시값)을 반환하거나, 커스텀 equality 함수가 필요합니다.
+
+## 4. 왜 useState + 이벤트가 아니라 이걸 쓰나 — tearing
+
+"그냥 스토어 값을 `useState`에 복사하고 subscribe로 갱신하면 되지 않나?" 싶지만, 그 방식은 **동시성 렌더링에서 tearing**(찢어짐)이 생길 수 있습니다. React 18의 동시성 기능은 렌더를 중단·재개하는데, 그 사이 외부 스토어가 바뀌면 **같은 화면의 두 컴포넌트가 서로 다른 값**을 보일 수 있습니다.
+
+`useSyncExternalStore`는 바로 이 문제를 막기 위해 존재합니다. 렌더 도중 스토어 일관성을 보장하고, SSR 스냅샷까지 맞춰 **하이드레이션 불일치**도 방지합니다. 외부 스토어를 구독한다면 이 훅을 쓰는 것이 정답입니다.
+
+## 5. 실제 Zustand와의 차이
+
+우리 40줄 스토어에 몇 가지만 더하면 Zustand에 가까워집니다.
+
+- **커스텀 equality**: `useStore(selector, shallow)` 처럼 얕은 비교를 옵션으로.
+- **미들웨어**: `persist`(localStorage 저장), `devtools`(Redux DevTools 연동), `immer`(불변성 편의).
+- **`create`가 훅을 반환**: `const useBearStore = create(...)` 형태로 스토어별 훅 생성.
+
+핵심 엔진은 방금 만든 그대로입니다 — **스토어(옵저버) + `useSyncExternalStore` + selector**.
+
+## 마무리
+
+Zustand 같은 라이브러리도 뜯어보면 스토어(옵저버) 하나에 `useSyncExternalStore`와 selector를 얹은 게 전부입니다. 방금 만든 40줄이 그 뼈대이고, 나머지는 equality 옵션이나 미들웨어 같은 편의 기능이죠.
+
+다음은 렌더링 성능 쪽으로 가봅니다. 수만 개의 행을 버벅임 없이 그리는 리스트 가상화를 직접 구현해 볼게요.

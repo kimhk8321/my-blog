@@ -97,6 +97,10 @@ class ValidationError extends Error {
 
 이벤트가 과도하게 발생할 때(스크롤, 입력, 리사이즈) 호출 빈도를 제어합니다.
 
+<Demo title="디바운스 vs 스로틀 — 빠르게 타이핑해 보기">
+  <DebounceThrottleDemo />
+</Demo>
+
 ```javascript
 // 디바운스: 마지막 호출 후 일정 시간이 지나면 1회 실행 (검색 입력 등)
 function debounce(fn, delay) {

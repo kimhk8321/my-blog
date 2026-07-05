@@ -15,6 +15,7 @@ import { getCategoryById } from "@/lib/categories";
 import { TagList } from "@/components/tag-list";
 import { PostNav } from "@/components/post-nav";
 import { Comments } from "@/components/comments";
+import { mdxComponents } from "@/components/mdx-components";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -104,6 +105,7 @@ export default async function PostPage({ params }: PageProps) {
       <div className="prose prose-neutral dark:prose-invert max-w-none prose-pre:bg-[#0d1117] prose-pre:text-[#e6edf3]">
         <MDXRemote
           source={post.content}
+          components={mdxComponents}
           options={{
             mdxOptions: {
               remarkPlugins: [[remarkGfm, { singleTilde: false }]],

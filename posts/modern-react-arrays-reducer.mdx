@@ -71,6 +71,10 @@ function TodoApp() {
 
 `useState`와 `useReducer` 중 어느 것을 쓸지는, 상태 변경이 **단순하면 useState**, **여러 종류로 복잡하면 useReducer**가 기준입니다.
 
+<Demo title="useReducer Todo — 추가·토글·삭제">
+  <ReducerTodoDemo />
+</Demo>
+
 ## React.memo — 리렌더링 최적화
 
 부모가 리렌더링되면 자식도 기본적으로 다시 렌더링됩니다. `React.memo`는 props가 바뀌지 않으면 자식 렌더링을 건너뜁니다.

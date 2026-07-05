@@ -1,0 +1,117 @@
+---
+title: "타입스크립트 타입 레벨 프로그래밍"
+description: "조건부 타입·infer·매핑된 타입·템플릿 리터럴 타입을 조합해, 타입만으로 계산하는 유틸리티를 직접 만들어 봅니다."
+date: "2026-07-05"
+category: "typescript"
+order: 8
+tags: ["TypeScript", "타입 레벨", "조건부 타입", "심화"]
+---
+
+[제네릭](/posts/typescript-generics)과 [유틸리티 타입](/posts/typescript-utility-types)을 넘어서면, 타입 시스템 자체가 하나의 **작은 프로그래밍 언어**라는 걸 알게 됩니다. 값이 아니라 **타입을 입력받아 타입을 계산**하는 것이죠. 라이브러리(예: `zod`, `react-hook-form`)의 강력한 추론이 여기서 나옵니다.
+
+## 조건부 타입 + infer
+
+`T extends U ? X : Y`는 타입 수준의 `if`이고, `infer`는 **패턴에서 타입을 추출**합니다.
+
+```ts
+// 함수의 반환 타입 추출 (ReturnType의 구현)
+type MyReturnType<T> = T extends (...args: any[]) => infer R ? R : never;
+
+type A = MyReturnType<() => string>; // string
+
+// 배열 요소 타입 추출
+type ElementOf<T> = T extends (infer E)[] ? E : never;
+type B = ElementOf<number[]>; // number
+
+// Promise 벗기기
+type Unwrap<T> = T extends Promise<infer V> ? V : T;
+type C = Unwrap<Promise<boolean>>; // boolean
+```
+
+## 매핑된 타입 (Mapped Types)
+
+객체의 각 키를 순회하며 변형합니다. `Partial`·`Readonly` 등이 이렇게 만들어집니다.
+
+```ts
+// 모든 값을 nullable로
+type Nullable<T> = { [K in keyof T]: T[K] | null };
+
+// 특정 키만 optional로 (내장에 없는 유틸)
+type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+
+interface User { id: number; name: string; email: string; }
+type Draft = PartialBy<User, "id">; // id만 선택적
+```
+
+**key 재매핑**(`as`)으로 키 이름 자체를 바꿀 수도 있습니다.
+
+```ts
+// 각 필드에 대한 getter 타입 생성
+type Getters<T> = {
+  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K];
+};
+
+type UserGetters = Getters<User>;
+// { getId: () => number; getName: () => string; getEmail: () => string }
+```
+
+## 템플릿 리터럴 타입
+
+문자열을 타입 수준에서 조합·분해합니다.
+
+```ts
+type Route = `/users/${number}`;
+const r1: Route = "/users/42"; // OK
+const r2: Route = "/users/abc"; // ❌
+
+// 이벤트 이름 조합
+type EventName<T extends string> = `on${Capitalize<T>}`;
+type Click = EventName<"click">; // "onClick"
+```
+
+## 재귀 타입 — 문자열 파싱 예제
+
+조건부 타입은 **재귀**할 수 있어, 타입만으로 파싱도 가능합니다. 예를 들어 경로 문자열에서 파라미터를 추출해 봅시다.
+
+```ts
+// "/users/:id/posts/:postId" → { id: string; postId: string }
+type ExtractParams<Path extends string> =
+  Path extends `${string}:${infer Param}/${infer Rest}`
+    ? { [K in Param]: string } & ExtractParams<`/${Rest}`>
+    : Path extends `${string}:${infer Param}`
+      ? { [K in Param]: string }
+      : {};
+
+type Params = ExtractParams<"/users/:id/posts/:postId">;
+// { id: string; postId: string }
+```
+
+이 패턴이 바로 [타입 안전한 라우터](/posts/build-client-router)나 API 클라이언트에서 "경로 문자열만 주면 파라미터 타입이 자동 추론"되는 마법의 정체입니다.
+
+## 실전 — 값에서 타입 뽑기 (infer + as const)
+
+`as const`와 조합하면 런타임 값에서 정확한 타입을 끌어낼 수 있습니다. `zod`의 `z.infer`가 이런 원리입니다.
+
+```ts
+const config = {
+  theme: "dark",
+  retries: 3,
+} as const;
+
+type Config = typeof config;
+// { readonly theme: "dark"; readonly retries: 3 }  ← 리터럴까지 정확히
+```
+
+## 과유불급
+
+타입 레벨 프로그래밍은 강력하지만, **복잡해지면 읽기 어렵고 컴파일이 느려집니다.**
+
+- 라이브러리 경계처럼 "한 번 잘 만들면 많은 곳이 편해지는" 곳에 쓰세요.
+- 앱 코드에서는 대개 [기본 유틸리티 타입](/posts/typescript-utility-types)으로 충분합니다.
+- 타입이 너무 난해해지면, 차라리 명시적으로 쓰는 게 유지보수에 낫습니다.
+
+## 마무리
+
+조건부 타입과 `infer`로 분기하고, 매핑된 타입으로 모양을 바꾸고, 템플릿 리터럴과 재귀로 문자열까지 파싱하다 보면 타입 시스템 자체가 작은 언어라는 말이 실감납니다. 여기까지 오면 `zod`나 라우터에서 "알아서 추론되는" 부분도 더 이상 마법처럼 보이지 않죠.
+
+과하면 읽기도 컴파일도 힘들어지니 라이브러리 경계에서만 아껴 쓰는 게 좋고요. 원리·구현·성능·타입까지 한 바퀴 돌았네요. 다음엔 규모를 키워서 디자인 시스템이나 FSD 같은 아키텍처 이야기로 가볼까 합니다.
