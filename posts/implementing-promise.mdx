@@ -1,0 +1,133 @@
+---
+title: "Promise 직접 구현하기"
+description: "상태 머신·콜백 큐·마이크로태스크 관점에서 Promise를 직접 구현하며 then 체이닝과 비동기 처리의 밑바닥을 이해합니다."
+date: "2026-07-05"
+category: "javascript"
+order: 6
+tags: ["JavaScript", "Promise", "비동기", "구현"]
+---
+
+[비동기 편](/posts/js-deep-dive-async)에서 Promise를 썼습니다. 이번엔 직접 만들어 봅니다. Promise는 결국 **상태 머신 + 콜백 큐**입니다. 이걸 구현하면 `then` 체이닝이 어떻게 동작하는지, 왜 콜백이 [마이크로태스크](/posts/js-deep-dive-async)로 실행되는지가 손에 잡힙니다.
+
+## Promise는 상태 머신
+
+Promise는 세 상태를 가집니다: **pending → fulfilled** 또는 **pending → rejected**. 한 번 정해지면 바뀌지 않습니다(settled).
+
+```js
+const STATE = { PENDING: "pending", FULFILLED: "fulfilled", REJECTED: "rejected" };
+```
+
+## 뼈대 — 생성자와 resolve/reject
+
+생성자는 실행 함수(executor)를 즉시 호출하고, `resolve`/`reject`로 상태를 확정합니다. 아직 pending일 때 등록된 콜백들은 큐에 모아 뒀다가, 확정되는 순간 실행합니다.
+
+```js
+class MyPromise {
+  constructor(executor) {
+    this.state = STATE.PENDING;
+    this.value = undefined;
+    this.callbacks = []; // pending 동안 쌓인 then 콜백들
+
+    const resolve = (value) => this.#settle(STATE.FULFILLED, value);
+    const reject = (reason) => this.#settle(STATE.REJECTED, reason);
+
+    try {
+      executor(resolve, reject);
+    } catch (err) {
+      reject(err);
+    }
+  }
+
+  #settle(state, value) {
+    if (this.state !== STATE.PENDING) return; // 이미 확정됐으면 무시
+    this.state = state;
+    this.value = value;
+    // 확정 시점에 쌓여 있던 콜백들을 마이크로태스크로 실행
+    this.callbacks.forEach((cb) => queueMicrotask(() => this.#run(cb)));
+    this.callbacks = [];
+  }
+}
+```
+
+핵심은 **`queueMicrotask`** 입니다. 콜백을 동기로 부르지 않고 마이크로태스크 큐에 넣기 때문에, Promise 콜백은 항상 현재 동기 코드가 끝난 뒤 실행됩니다. 그 순서를 직접 확인해 보세요.
+
+<Demo title="실행 순서 — 동기 → 마이크로태스크 → 매크로태스크">
+  <PromiseOrderDemo />
+</Demo>
+
+## then — 체이닝의 핵심
+
+`then`은 **새 Promise를 반환**해야 합니다. 그래야 `.then().then()`이 이어집니다. 콜백의 반환값으로 다음 Promise를 resolve하고, 콜백이 또 Promise를 반환하면 그게 풀릴 때까지 기다립니다.
+
+```js
+then(onFulfilled, onRejected) {
+  return new MyPromise((resolve, reject) => {
+    const cb = { onFulfilled, onRejected, resolve, reject };
+    if (this.state === STATE.PENDING) {
+      this.callbacks.push(cb); // 아직이면 큐에
+    } else {
+      queueMicrotask(() => this.#run(cb)); // 이미 확정이면 바로 예약
+    }
+  });
+}
+
+#run({ onFulfilled, onRejected, resolve, reject }) {
+  try {
+    if (this.state === STATE.FULFILLED) {
+      const result = onFulfilled ? onFulfilled(this.value) : this.value;
+      resolveResult(result, resolve, reject); // 반환값이 Promise면 풀어서 연결
+    } else {
+      if (onRejected) resolveResult(onRejected(this.value), resolve, reject);
+      else reject(this.value); // 핸들러 없으면 에러를 다음으로 전파
+    }
+  } catch (err) {
+    reject(err);
+  }
+}
+
+// 콜백 반환값이 thenable이면 그것을 따라간다
+function resolveResult(result, resolve, reject) {
+  if (result && typeof result.then === "function") {
+    result.then(resolve, reject);
+  } else {
+    resolve(result);
+  }
+}
+```
+
+이 `resolveResult`가 "then 안에서 Promise를 반환하면 그게 풀릴 때까지 기다린다"는 **체이닝의 마법**을 만듭니다.
+
+## 편의 메서드
+
+`catch`와 `finally`는 `then` 위에 얹으면 됩니다.
+
+```js
+catch(onRejected) {
+  return this.then(undefined, onRejected);
+}
+
+finally(onFinally) {
+  return this.then(
+    (v) => { onFinally(); return v; },
+    (e) => { onFinally(); throw e; },
+  );
+}
+```
+
+## 동작 확인
+
+```js
+new MyPromise((resolve) => setTimeout(() => resolve(1), 100))
+  .then((v) => v + 1)          // 2
+  .then((v) => new MyPromise((r) => r(v * 10))) // 반환이 Promise → 풀어서 연결
+  .then((v) => console.log(v)); // 20
+
+console.log("동기 코드 먼저");
+// 출력: "동기 코드 먼저" → (100ms 후) → 20
+```
+
+## 마무리
+
+Promise를 뜯어보면 생각보다 단출합니다. 한 번만 확정되는 상태 머신, 확정 전까지 콜백을 모아두는 큐, 그리고 그 콜백을 마이크로태스크로 실행하는 것. 여기에 `then`이 새 Promise를 돌려준다는 점만 챙기면 체이닝까지 자연스럽게 이어지죠. 매일 쓰는 `async/await`도 결국 이 위에 얹힌 설탕입니다.
+
+다음 글에서는 다시 React로 돌아와, History API로 클라이언트 라우터를 직접 만들어 봅니다.

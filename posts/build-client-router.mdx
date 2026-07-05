@@ -1,0 +1,107 @@
+---
+title: "클라이언트 라우터 직접 만들기 (History API)"
+description: "History API와 popstate 이벤트로 새로고침 없는 SPA 라우터를 직접 구현하며, 라우팅의 원리를 라이브 데모와 함께 이해합니다."
+date: "2026-07-05"
+category: "react"
+order: 7
+tags: ["React", "라우터", "History API", "구현"]
+---
+
+[React Router](/posts/modern-react-styling-routing)를 써봤다면, 그 밑에서 무슨 일이 일어나는지 궁금했을 겁니다. SPA 라우팅의 핵심은 두 가지 — **URL을 새로고침 없이 바꾸는 History API**와, **뒤로/앞으로에 반응하는 popstate 이벤트**입니다. 이걸로 미니 라우터를 만들어 봅니다.
+
+## 라우팅이란
+
+라우팅은 결국 **"현재 경로 → 보여줄 컴포넌트"의 매핑**입니다. 전통적 웹은 경로가 바뀌면 서버에서 새 HTML을 받았지만, SPA는 **경로만 바꾸고 화면은 자바스크립트로 교체**합니다.
+
+## 개념 데모
+
+먼저 "경로 → 화면" 매핑이 어떤 느낌인지 봅니다. 버튼을 누르면 새로고침 없이 화면만 바뀝니다. (데모는 실제 URL을 건드리지 않도록 상태로만 라우팅합니다.)
+
+<Demo title="미니 라우터 — 경로에 따라 화면 교체">
+  <MiniRouterDemo />
+</Demo>
+
+## History API — 새로고침 없이 URL 바꾸기
+
+`history.pushState`는 **페이지를 다시 불러오지 않고** 주소창의 URL과 히스토리 항목을 바꿉니다.
+
+```js
+history.pushState(state, "", "/about"); // URL이 /about으로, 새로고침 없음
+```
+
+문제는 `pushState`가 **popstate 이벤트를 발생시키지 않는다**는 점입니다. 그래서 우리가 직접 상태를 갱신해 화면을 다시 그려야 합니다. 반대로 **뒤로/앞으로 가기**는 `popstate`를 발생시킵니다.
+
+## React 훅으로 구현
+
+현재 경로를 상태로 들고, `popstate`를 구독해 뒤로가기에 반응합니다. `navigate`는 `pushState` 후 상태를 갱신합니다.
+
+```jsx
+import { useState, useEffect, useCallback } from "react";
+
+function useRouter() {
+  const [path, setPath] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    // 뒤로/앞으로 → popstate 발생 → 경로 동기화
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const navigate = useCallback((to) => {
+    window.history.pushState(null, "", to); // URL 변경(새로고침 X)
+    setPath(to); // pushState는 popstate를 안 쏘므로 직접 갱신
+  }, []);
+
+  return { path, navigate };
+}
+```
+
+## Route / Link 컴포넌트
+
+이제 [React Router](/posts/modern-react-styling-routing)의 `Route`·`Link`와 똑같은 API를 얹을 수 있습니다.
+
+```jsx
+function App() {
+  const { path, navigate } = useRouter();
+
+  return (
+    <>
+      <nav>
+        <Link navigate={navigate} to="/">홈</Link>
+        <Link navigate={navigate} to="/about">소개</Link>
+      </nav>
+      {path === "/" && <Home />}
+      {path === "/about" && <About />}
+    </>
+  );
+}
+
+function Link({ navigate, to, children }) {
+  return (
+    <a
+      href={to}
+      onClick={(e) => {
+        e.preventDefault(); // 기본 이동(새로고침) 막고
+        navigate(to);       // 클라이언트 라우팅
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+```
+
+`Link`의 포인트는 `<a>`의 **기본 동작을 막는 것**입니다. 그래야 브라우저가 페이지를 새로 불러오지 않고, 우리 `navigate`가 화면만 교체합니다. (SEO·접근성을 위해 실제 `href`는 유지해야 합니다.)
+
+## 놓치기 쉬운 것들
+
+- **`<a>` 기본 동작 방지**: 안 막으면 그냥 전통적 새로고침이 됩니다.
+- **동적 경로**(`/posts/:id`): 경로를 정규식/패턴으로 매칭해 파라미터를 추출해야 합니다.
+- **서버 설정**: `/about`을 직접 새로고침하면 서버가 그 경로의 파일을 찾습니다. SPA는 모든 경로를 `index.html`로 보내는 **폴백**이 필요합니다. (Next.js 같은 프레임워크는 이걸 자동 처리)
+
+## 마무리
+
+클라이언트 라우팅도 뜯어보면 "경로 → 컴포넌트" 매핑에, `pushState`로 URL을 바꾸고 `popstate`로 뒤로가기에 반응하는 게 전부입니다. React Router든 Next.js App Router든 이 위에 파일 기반 라우팅이나 데이터 로딩, 프리페칭을 얹었을 뿐이죠.
+
+다음 글에서는 방향을 완전히 틀어, 타입스크립트의 타입 레벨 프로그래밍으로 들어갑니다.
