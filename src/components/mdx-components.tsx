@@ -13,6 +13,11 @@ import { ReducerTodoDemo } from "@/components/mdx/reducer-todo-demo";
 import { UseDebounceDemo } from "@/components/mdx/use-debounce-demo";
 import { ContextThemeDemo } from "@/components/mdx/context-theme-demo";
 import { ErrorBoundaryDemo } from "@/components/mdx/error-boundary-demo";
+import { OptimisticLikeDemo } from "@/components/mdx/optimistic-like-demo";
+import { RerenderCountDemo } from "@/components/mdx/rerender-count-demo";
+import { HeadlessTabsDemo } from "@/components/mdx/headless-tabs-demo";
+import { InfiniteScrollDemo } from "@/components/mdx/infinite-scroll-demo";
+import { ViewTransitionDemo } from "@/components/mdx/view-transition-demo";
 
 type MdxComponent = ComponentType<Record<string, unknown>>;
 
@@ -32,4 +37,9 @@ export const mdxComponents: Record<string, MdxComponent> = {
   UseDebounceDemo: UseDebounceDemo as MdxComponent,
   ContextThemeDemo: ContextThemeDemo as MdxComponent,
   ErrorBoundaryDemo: ErrorBoundaryDemo as MdxComponent,
+  OptimisticLikeDemo: OptimisticLikeDemo as MdxComponent,
+  RerenderCountDemo: RerenderCountDemo as MdxComponent,
+  HeadlessTabsDemo: HeadlessTabsDemo as MdxComponent,
+  InfiniteScrollDemo: InfiniteScrollDemo as MdxComponent,
+  ViewTransitionDemo: ViewTransitionDemo as MdxComponent,
 };

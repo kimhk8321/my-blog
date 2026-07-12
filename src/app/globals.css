@@ -97,3 +97,9 @@ body {
 .hljs:hover::-webkit-scrollbar-thumb {
   background-color: rgba(148, 163, 184, 0.55);
 }
+
+/* View Transitions — 루트(전체 페이지) 크로스페이드를 끄고, 이름 붙은 요소만 애니메이션 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
