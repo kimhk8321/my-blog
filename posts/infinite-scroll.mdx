@@ -1,0 +1,100 @@
+---
+title: "무한 스크롤 — IntersectionObserver로 제대로 구현하기"
+description: "scroll 이벤트로 위치를 계산하던 시절은 지났다. IntersectionObserver로 '바닥 감지'를 선언적으로 처리하고, 중복 로딩·정리까지 챙기는 무한 스크롤을 만듭니다."
+date: "2026-07-12"
+category: "performance"
+order: 5
+tags: ["IntersectionObserver", "무한 스크롤", "브라우저 API", "성능"]
+---
+
+무한 스크롤을 옛날 방식으로 짜면 이렇게 시작합니다. `scroll` 이벤트를 듣고, `scrollTop + clientHeight`가 `scrollHeight`에 가까워지면 다음 페이지를 부르고… 문제는 이 이벤트가 **스크롤할 때마다 수십 번씩** 발생한다는 겁니다. 매번 레이아웃 값을 읽으니 스크롤이 버벅이고, 스로틀을 걸어도 근본은 그대로입니다.
+
+**IntersectionObserver**는 이 문제를 뒤집습니다. "요소가 화면에 보이는지"를 브라우저가 **메인 스레드 밖에서** 감시하다가, 상태가 바뀔 때만 알려줍니다. 스크롤 위치를 우리가 계산할 필요가 없어지죠.
+
+## 먼저 만져 보기
+
+<InfiniteScrollDemo />
+
+리스트를 끝까지 내리면 항목이 알아서 더 불러와집니다. `scroll` 이벤트는 한 줄도 없습니다. 맨 아래의 "감지용" 요소가 화면에 들어오는 순간만 콜백이 도는 구조입니다.
+
+## 핵심 아이디어 — 센티넬(sentinel)
+
+리스트 맨 끝에 눈에 안 띄는 **감지용 요소(sentinel)** 를 하나 둡니다. 이 센티넬이 뷰포트에 들어왔다 = 사용자가 바닥까지 스크롤했다는 뜻이니, 그때 다음 페이지를 부릅니다.
+
+```jsx
+function InfiniteList() {
+  const [items, setItems] = useState(initialItems);
+  const sentinelRef = useRef(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+
+    const io = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        loadMore(); // 바닥이 보였다 → 더 불러오기
+      }
+    });
+
+    io.observe(el);
+    return () => io.disconnect(); // 정리!
+  }, []);
+
+  return (
+    <ul>
+      {items.map((i) => <li key={i.id}>{i.text}</li>)}
+      <li ref={sentinelRef} />
+    </ul>
+  );
+}
+```
+
+`entries[0].isIntersecting`이 센티넬이 보이는지 여부입니다. `return () => io.disconnect()`로 언마운트 시 관찰을 끊는 걸 잊지 마세요 — 안 그러면 옵저버가 메모리에 남습니다.
+
+## 함정 1: 중복 로딩
+
+가장 흔한 버그입니다. 센티넬이 화면에 머무는 동안 콜백이 여러 번 불릴 수 있고, 로딩이 끝나기 전에 또 불리면 같은 페이지를 두 번 요청합니다. **로딩 중 플래그**로 막습니다.
+
+```jsx
+const loadingRef = useRef(false);
+
+const io = new IntersectionObserver(async (entries) => {
+  if (entries[0].isIntersecting && !loadingRef.current) {
+    loadingRef.current = true;
+    await loadMore();
+    loadingRef.current = false;
+  }
+});
+```
+
+여기서 왜 `useState`가 아니라 `useRef`일까요? 플래그가 바뀔 때마다 리렌더될 필요는 없고, 콜백 안에서 **항상 최신 값**을 즉시 읽어야 하기 때문입니다. state였다면 클로저에 갇힌 옛 값을 볼 위험이 있습니다.
+
+## 함정 2: 너무 늦게 로딩
+
+센티넬이 화면에 **닿아야** 로딩이 시작되면, 사용자가 바닥을 보고 잠깐 기다리게 됩니다. `rootMargin`으로 감지 범위를 미리 넓혀 두면, 바닥에 닿기 전에 로딩이 시작돼 끊김 없이 이어집니다.
+
+```jsx
+new IntersectionObserver(callback, {
+  rootMargin: "200px", // 뷰포트 아래로 200px 더 일찍 감지
+});
+```
+
+`root`를 지정하면 스크롤 컨테이너를 뷰포트 대신 특정 요소로 바꿀 수도 있습니다(위 데모처럼 박스 안에서 스크롤하는 경우).
+
+## 함정 3: 끝을 모른다
+
+서버가 더 줄 데이터가 없는데도 계속 요청하면 곤란합니다. 응답에 다음 페이지 유무를 담아 `hasMore`로 관리하고, 없으면 아예 관찰을 멈춥니다.
+
+```jsx
+if (!hasMore) return; // 옵저버를 새로 붙이지 않음
+```
+
+## 무한 스크롤이 항상 정답은 아니다
+
+기술과 별개로 UX 판단이 필요합니다. 무한 스크롤은 피드·탐색형 콘텐츠엔 잘 맞지만, **푸터에 영영 닿지 못하는** 문제가 있고 "몇 개 중 몇 번째"라는 감각을 지웁니다. 특정 항목으로 되돌아가기도 어렵죠. 검색 결과나 관리자 테이블처럼 위치·전체량이 중요한 화면은 **페이지네이션**이나 "더 보기" 버튼이 더 나은 선택일 때가 많습니다.
+
+그리고 항목이 수천 개로 불어나면 무한 스크롤만으로는 부족합니다. DOM에 다 쌓이면 느려지니, [가상 리스트](/posts/virtual-list-windowing)로 화면에 보이는 만큼만 렌더하는 기법과 함께 써야 합니다.
+
+---
+
+IntersectionObserver의 미덕은 "위치를 계산하지 않는다"입니다. 우리는 "이 요소가 보이면 알려줘"라고 선언만 하고, 나머지는 브라우저가 효율적으로 처리하죠. 무한 스크롤 외에도 이미지 지연 로딩, 스크롤 애니메이션 트리거에 두루 쓰이는 도구입니다. 다음 글에서는 시선을 도구 쪽으로 돌려, 번들러가 하는 일을 [미니 번들러](/posts/mini-bundler)를 직접 만들며 파헤칩니다.

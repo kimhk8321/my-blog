@@ -1,0 +1,102 @@
+---
+title: "View Transitions API — 화면 전환에 애니메이션을 입히기"
+description: "요소가 이전 위치에서 새 위치로 스르륵 미끄러진다. 브라우저 네이티브 View Transitions로 상태 변화에 부드러운 애니메이션을 붙이는 법을 정리합니다."
+date: "2026-07-12"
+category: "styling"
+order: 2
+tags: ["View Transitions", "애니메이션", "CSS", "브라우저 API"]
+---
+
+리스트를 정렬하거나 카드를 옮길 때, 항목이 툭 하고 순간이동하면 사용자는 "뭐가 어디로 갔지?" 하고 잠깐 길을 잃습니다. 위치가 바뀌는 과정을 **눈으로 따라갈 수 있게** 해주면 그 인지 부담이 사라집니다.
+
+예전엔 이걸 손으로 했습니다. 이전 위치를 재고(FLIP), 차이를 계산해 `transform`으로 애니메이션하고… **View Transitions API**는 이 과정을 브라우저에게 통째로 맡깁니다. "상태를 바꾸는 코드"만 주면, 전후 스냅샷을 떠서 알아서 이어줍니다.
+
+## 먼저 만져 보기
+
+<ViewTransitionDemo />
+
+"섞기"를 누르면 각 박스가 새 자리로 미끄러집니다. 우리가 한 건 배열 순서를 바꾼 것뿐이고, 위치 보간은 브라우저가 했습니다.
+
+## 기본형
+
+핵심 API는 딱 하나, `document.startViewTransition`입니다.
+
+```js
+document.startViewTransition(() => {
+  // 여기서 DOM을 '최종 상태'로 바꾼다 (React라면 setState)
+  setOrder(shuffled);
+});
+```
+
+동작 순서는 이렇습니다.
+
+1. 콜백 실행 **직전**, 브라우저가 현재 화면을 스냅샷(old)으로 찍습니다.
+2. 콜백이 DOM을 바꿉니다.
+3. 바뀐 화면을 다시 스냅샷(new)으로 찍습니다.
+4. old → new를 기본 크로스페이드로 애니메이션합니다.
+
+이 상태로도 페이지 전체가 은은하게 페이드됩니다. 하지만 우리가 원하는 건 "박스가 이동하는" 애니메이션이죠. 그러려면 **어떤 요소가 어떤 요소인지** 브라우저에 알려줘야 합니다.
+
+## view-transition-name — 정체성 부여
+
+각 요소에 고유한 이름을 주면, 브라우저는 old 스냅샷의 그 이름과 new 스냅샷의 같은 이름을 **같은 대상**으로 보고 위치·크기를 보간합니다.
+
+```jsx
+{order.map((n) => (
+  <div key={n} style={{ viewTransitionName: `vt-box-${n}` }}>
+    {n}
+  </div>
+))}
+```
+
+`vt-box-3`이 왼쪽 끝에 있다가 오른쪽으로 갔다면, 브라우저는 "3번은 여기서 저기로 갔구나" 하고 미끄러뜨립니다. 이름은 **화면 안에서 유일**해야 합니다. 같은 이름이 둘이면 브라우저가 짝을 못 지어 경고를 냅니다.
+
+## 전체 페이지가 깜빡이는 걸 막기
+
+기본 크로스페이드는 `root`라는 이름의 가짜 요소(페이지 전체)에 걸립니다. 리스트만 움직이길 원하는데 페이지 전체가 페이드되면 거슬리죠. CSS로 루트 전환만 꺼줍니다.
+
+```css
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+```
+
+`::view-transition-old(name)` / `::view-transition-new(name)`은 각 스냅샷을 가리키는 의사 요소입니다. 여기에 원하는 `animation`을 걸어 전환의 커브·시간·효과를 완전히 커스터마이즈할 수 있습니다.
+
+```css
+::view-transition-old(vt-box-3) {
+  animation-duration: 0.4s;
+  animation-timing-function: ease-in-out;
+}
+```
+
+## 지원 안 되는 브라우저는?
+
+`startViewTransition`이 없으면 그냥 콜백을 바로 부르면 됩니다. 애니메이션만 빠지고 기능은 멀쩡하죠. 전형적인 **점진적 향상(progressive enhancement)** 입니다.
+
+```js
+function withTransition(update) {
+  if (document.startViewTransition) {
+    document.startViewTransition(update);
+  } else {
+    update();
+  }
+}
+```
+
+## 접근성 한 가지
+
+일부 사용자는 움직임 자체가 불편합니다. `prefers-reduced-motion`을 존중하세요.
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*) {
+    animation: none;
+  }
+}
+```
+
+---
+
+View Transitions는 "무엇이 바뀌었는가"만 코드로 표현하고 "어떻게 이어질까"는 브라우저에 맡기는 API입니다. FLIP을 손으로 짜던 시절과 비교하면 사고방식 자체가 선언적으로 바뀝니다. 다음 글에서는 방향을 틀어, 애니메이션이 아니라 **불필요한 렌더 자체를 줄이는** [리렌더 최적화](/posts/rerender-optimization)를 프로파일링과 함께 봅니다.

@@ -1,0 +1,145 @@
+---
+title: "미니 번들러 만들기 — import 한 줄이 하나의 파일이 되기까지"
+description: "webpack·Vite가 마법처럼 느껴진다면, 100줄짜리 번들러를 직접 만들어 보자. 진입점에서 시작해 의존성 그래프를 그리고, 모듈을 하나의 파일로 합치는 과정을 따라갑니다."
+date: "2026-07-12"
+category: "build-tools"
+order: 6
+tags: ["번들러", "webpack", "모듈 시스템", "빌드", "구현"]
+---
+
+`import`와 `export`로 나눠 쓴 수십 개의 파일이, 어떻게 브라우저가 이해하는 하나의 `bundle.js`가 될까요? webpack이나 Vite를 쓰면서도 그 안에서 무슨 일이 벌어지는지는 대개 블랙박스로 남습니다.
+
+번들러가 하는 일은 사실 세 단계로 요약됩니다. **① 진입점부터 의존성을 따라가며 그래프를 그리고 ② 각 모듈을 함수로 감싸고 ③ 자체 `require`를 심어 하나로 합친다.** 이 글에서는 이 세 단계를 100줄 남짓한 코드로 직접 만들어 봅니다. (Node 환경에서 도는 개념 코드입니다.)
+
+## 1단계: 하나의 모듈을 분석하기
+
+먼저 파일 하나를 읽어 **무엇을 import하는지** 알아내야 합니다. 정규식으로 `import`를 긁을 수도 있지만, 정확하려면 코드를 **AST(추상 구문 트리)** 로 파싱해야 합니다. Babel을 씁니다.
+
+```js
+import fs from "node:fs";
+import path from "node:path";
+import babel from "@babel/core";
+import traverse from "@babel/traverse";
+
+let ID = 0;
+
+function createAsset(filename) {
+  const content = fs.readFileSync(filename, "utf-8");
+  const ast = babel.parseSync(content, { sourceType: "module" });
+
+  // 이 파일이 import하는 경로들을 수집
+  const dependencies = [];
+  traverse.default(ast, {
+    ImportDeclaration({ node }) {
+      dependencies.push(node.source.value); // 예: "./message.js"
+    },
+  });
+
+  // 브라우저가 못 읽는 ESM/JSX를 CommonJS로 변환
+  const { code } = babel.transformFromAstSync(ast, null, {
+    presets: ["@babel/preset-env"],
+  });
+
+  return { id: ID++, filename, dependencies, code };
+}
+```
+
+한 파일에서 세 가지를 뽑았습니다 — 고유 **id**, 이 파일이 의존하는 경로 목록(**dependencies**), 그리고 변환된 **code**. 이 단위를 **에셋(asset)** 이라 부르겠습니다.
+
+## 2단계: 의존성 그래프 그리기
+
+이제 진입점 하나에서 시작해, 그 파일이 import하는 파일을, 또 그 파일이 import하는 파일을… 큐를 돌며 전부 따라갑니다. 너비 우선 탐색(BFS)입니다.
+
+```js
+function createGraph(entry) {
+  const mainAsset = createAsset(entry);
+  const queue = [mainAsset];
+
+  for (const asset of queue) {
+    asset.mapping = {}; // "상대경로" → "모듈 id" 대응표
+    const dirname = path.dirname(asset.filename);
+
+    asset.dependencies.forEach((relativePath) => {
+      const absolutePath = path.join(dirname, relativePath);
+      const child = createAsset(absolutePath);
+
+      asset.mapping[relativePath] = child.id; // 경로를 id로 연결
+      queue.push(child); // 이 자식도 마저 분석
+    });
+  }
+
+  return queue; // 모든 모듈의 평탄한 배열
+}
+```
+
+여기서 결정적인 게 `mapping`입니다. 모듈 안의 `require("./message.js")`는 상대 경로인데, 번들 안에서는 파일이 사라지고 **숫자 id**만 남습니다. 그래서 "`./message.js`는 곧 2번 모듈"이라는 대응표를 각 모듈마다 들고 다녀야 합니다.
+
+> 실제 번들러는 여기서 **중복 제거**(같은 파일을 두 번 넣지 않기)와 **순환 의존성** 처리를 더 합니다. 개념을 위해 생략했습니다.
+
+## 3단계: 하나로 합치기
+
+이제 그래프를 문자열 하나로 직렬화합니다. 핵심 트릭은 **각 모듈을 함수로 감싸는 것**입니다. 그래야 모듈마다 스코프가 격리되고(전역 오염 방지), 우리가 만든 `require`를 주입할 수 있습니다.
+
+```js
+function bundle(graph) {
+  let modules = "";
+
+  graph.forEach((mod) => {
+    // 각 모듈 = [함수, 매핑표] 튜플
+    modules += `${mod.id}: [
+      function (require, module, exports) { ${mod.code} },
+      ${JSON.stringify(mod.mapping)}
+    ],`;
+  });
+
+  // 자체 모듈 시스템(런타임)
+  return `
+    (function (modules) {
+      function require(id) {
+        const [fn, mapping] = modules[id];
+
+        // 이 모듈 안의 require("./x")를 실제 require(숫자id)로 연결
+        function localRequire(relativePath) {
+          return require(mapping[relativePath]);
+        }
+
+        const module = { exports: {} };
+        fn(localRequire, module, module.exports);
+        return module.exports;
+      }
+
+      require(0); // 진입점부터 실행
+    })({ ${modules} });
+  `;
+}
+```
+
+풀어 보면 이렇습니다.
+
+- 각 모듈은 `function (require, module, exports) { ... }`로 감싸집니다. Node의 CommonJS 래핑과 똑같은 모양이죠.
+- `localRequire`가 마법의 접착제입니다. 모듈 코드가 `require("./message.js")`를 부르면, `mapping`을 거쳐 `require(2)`로 바뀝니다. **문자열 경로가 숫자 id로 번역**되는 지점입니다.
+- `module.exports` 객체를 넘겨주고, 모듈이 거기에 채워 넣은 값을 돌려받습니다. 이게 모듈 간에 값이 오가는 통로입니다.
+- 마지막 `require(0)`이 진입점을 실행하며 도미노가 시작됩니다.
+
+```js
+const graph = createGraph("./src/index.js");
+const result = bundle(graph);
+fs.writeFileSync("./dist/bundle.js", result);
+```
+
+이 `bundle.js`는 이제 `import`/`export` 없이, 자체 `require`만으로 돌아가는 자립형 파일입니다. 브라우저에 그대로 넣어도 실행됩니다.
+
+## 진짜 번들러는 여기서 무엇을 더 하나
+
+우리가 만든 건 뼈대입니다. 실전 번들러는 이 위에 얹습니다.
+
+- **로더/플러그인**: CSS·이미지·TS 등 JS가 아닌 것도 모듈로 취급
+- **트리 셰이킹**: 실제로 쓰이는 export만 남기고 죽은 코드 제거
+- **코드 스플리팅**: 하나의 거대 번들 대신 필요할 때 로드하는 청크로 분할
+- **캐싱**: 안 바뀐 모듈은 다시 처리하지 않기 (Vite가 개발 중 빠른 이유)
+
+특히 Vite는 개발 중엔 아예 번들링을 건너뛰고 브라우저의 네이티브 ESM을 그대로 쓴다는 점에서 접근이 다릅니다 — 그 얘기는 [Vite 빌드 최적화](/posts/vite-build-optimization) 글에서 다뤘습니다.
+
+---
+
+번들러의 정체는 결국 **"의존성 그래프를 그리고, 모듈을 격리해 감싸고, 자체 모듈 런타임을 심는 것"** 입니다. 한 번 직접 만들어 보면 webpack 설정의 `entry`·`output`이 왜 그렇게 생겼는지, 소스맵과 청크가 무엇을 가리키는지가 훨씬 선명해집니다. 이번 주 6편은 여기서 마무리합니다.
