@@ -4,7 +4,7 @@ description: "scroll 이벤트로 위치를 계산하던 시절은 지났다. In
 date: "2026-07-12"
 category: "performance"
 order: 5
-tags: ["IntersectionObserver", "무한 스크롤", "브라우저 API", "성능"]
+tags: ["IntersectionObserver", "무한 스크롤", "브라우저 API", "성능", "데모"]
 ---
 
 무한 스크롤을 옛날 방식으로 짜면 이렇게 시작합니다. `scroll` 이벤트를 듣고, `scrollTop + clientHeight`가 `scrollHeight`에 가까워지면 다음 페이지를 부르고… 문제는 이 이벤트가 **스크롤할 때마다 수십 번씩** 발생한다는 겁니다. 매번 레이아웃 값을 읽으니 스크롤이 버벅이고, 스로틀을 걸어도 근본은 그대로입니다.

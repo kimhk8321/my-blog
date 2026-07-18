@@ -18,6 +18,11 @@ import { RerenderCountDemo } from "@/components/mdx/rerender-count-demo";
 import { HeadlessTabsDemo } from "@/components/mdx/headless-tabs-demo";
 import { InfiniteScrollDemo } from "@/components/mdx/infinite-scroll-demo";
 import { ViewTransitionDemo } from "@/components/mdx/view-transition-demo";
+import { WebWorkerDemo } from "@/components/mdx/web-worker-demo";
+import { DragSortDemo } from "@/components/mdx/drag-sort-demo";
+import { StateMachineDemo } from "@/components/mdx/state-machine-demo";
+import { SuspenseUseDemo } from "@/components/mdx/suspense-use-demo";
+import { FocusTrapModalDemo } from "@/components/mdx/focus-trap-modal-demo";
 
 type MdxComponent = ComponentType<Record<string, unknown>>;
 
@@ -42,4 +47,9 @@ export const mdxComponents: Record<string, MdxComponent> = {
   HeadlessTabsDemo: HeadlessTabsDemo as MdxComponent,
   InfiniteScrollDemo: InfiniteScrollDemo as MdxComponent,
   ViewTransitionDemo: ViewTransitionDemo as MdxComponent,
+  WebWorkerDemo: WebWorkerDemo as MdxComponent,
+  DragSortDemo: DragSortDemo as MdxComponent,
+  StateMachineDemo: StateMachineDemo as MdxComponent,
+  SuspenseUseDemo: SuspenseUseDemo as MdxComponent,
+  FocusTrapModalDemo: FocusTrapModalDemo as MdxComponent,
 };
