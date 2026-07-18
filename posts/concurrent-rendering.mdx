@@ -4,7 +4,7 @@ description: "무거운 렌더링이 입력을 막지 않도록, React 18 동시
 date: "2026-07-05"
 category: "performance"
 order: 4
-tags: ["React", "동시성", "useTransition", "성능"]
+tags: ["React", "동시성", "useTransition", "성능", "데모"]
 ---
 
 [리스트 가상화](/posts/virtual-list-windowing)로 "안 보이는 건 안 그린다"를 배웠습니다. 그런데 화면에 실제로 그려야 할 게 많아 렌더 자체가 무거우면요? 검색어를 한 글자 칠 때마다 수천 개 항목을 다시 그리면 입력이 버벅입니다. React 18의 **동시성 렌더링**은 "급한 일(입력)"과 "덜 급한 일(목록 갱신)"을 구분해 이 문제를 풉니다.
