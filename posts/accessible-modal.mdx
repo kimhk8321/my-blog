@@ -1,0 +1,129 @@
+---
+title: "접근 가능한 모달 만들기 — 포커스 트랩의 원리"
+description: "모달은 띄우는 것보다 포커스를 다루는 게 어렵다. 포커스 트랩, 포커스 복귀, ARIA, 배경 비활성화까지 접근 가능한 모달의 필수 요소를 직접 구현합니다."
+date: "2026-07-18"
+category: "architecture"
+order: 5
+tags: ["접근성", "모달", "포커스 관리", "ARIA", "데모"]
+---
+
+모달을 화면에 띄우는 건 쉽습니다. `position: fixed`에 반투명 배경 깔고 가운데 박스 하나 놓으면 끝이죠. 하지만 **접근 가능한** 모달은 완전히 다른 이야기입니다. 진짜 어려운 건 겉모습이 아니라 **포커스를 어떻게 다루느냐**입니다.
+
+키보드만 쓰는 사용자, 스크린 리더 사용자를 생각해 보세요. 모달이 떠도 포커스가 뒤쪽 페이지에 남아 있으면, Tab을 눌렀을 때 보이지도 않는 배경 요소로 포커스가 새어 나갑니다. 모달은 떠 있는데 조작은 엉뚱한 데서 되는 거죠. 이걸 막는 게 **포커스 트랩**입니다.
+
+## 먼저 만져 보기
+
+<FocusTrapModalDemo />
+
+"모달 열기"를 누르면 포커스가 모달 안 첫 요소로 이동합니다. Tab을 계속 눌러 보세요 — 포커스가 모달 안에서만 순환하고 밖으로 나가지 않습니다. Esc로 닫으면 포커스가 다시 "모달 열기" 버튼으로 돌아옵니다.
+
+## 접근 가능한 모달의 체크리스트
+
+WAI-ARIA가 요구하는 대화상자(dialog)의 요건은 이렇습니다.
+
+1. **열리면** 포커스를 모달 안으로 이동
+2. **Tab 순환**을 모달 내부에 가둠 (포커스 트랩)
+3. **Esc**로 닫기
+4. **닫히면** 포커스를 열었던 요소로 복귀
+5. 적절한 **ARIA 속성** (`role="dialog"`, `aria-modal="true"`, 제목 연결)
+6. 배경 콘텐츠를 스크린 리더에서 **비활성화**
+
+하나씩 코드로 옮겨 봅니다.
+
+## 1) 열릴 때 포커스 이동
+
+모달이 뜨면 안쪽의 첫 포커스 가능한 요소로 포커스를 옮깁니다.
+
+```jsx
+useEffect(() => {
+  if (!open) return;
+  const modal = modalRef.current;
+  const focusables = modal.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+  );
+  focusables[0]?.focus(); // 첫 요소로
+}, [open]);
+```
+
+저 셀렉터가 "탭으로 갈 수 있는 요소들"을 긁는 표준 관용구입니다. `tabindex="-1"`은 프로그램적으로만 포커스되는 것이니 제외합니다.
+
+## 2) 포커스 트랩 — 경계에서 순환
+
+핵심입니다. Tab이 마지막 요소를 넘어가려 하면 첫 요소로, Shift+Tab이 첫 요소를 넘어가려 하면 마지막 요소로 되돌립니다.
+
+```jsx
+const focusables = modal.querySelectorAll(/* 위와 동일 */);
+const first = focusables[0];
+const last = focusables[focusables.length - 1];
+
+function onKeyDown(e) {
+  if (e.key !== "Tab") return;
+
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus(); // 맨 앞에서 뒤로 감기
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus(); // 맨 뒤에서 앞으로 감기
+  }
+}
+```
+
+`document.activeElement`로 지금 포커스된 요소가 경계인지 확인하고, 경계라면 `preventDefault`로 브라우저의 기본 이동을 막은 뒤 반대편으로 보냅니다. 이게 "가둔다"의 실체입니다.
+
+## 3) Esc로 닫고 4) 포커스 복귀
+
+Esc 처리와, 닫을 때 **원래 위치로 포커스를 되돌리는 것**을 함께 봅니다. 4번을 빠뜨리는 구현이 정말 많은데, 이게 없으면 모달을 닫는 순간 포커스가 페이지 맨 위로 튕겨 사용자가 길을 잃습니다.
+
+```jsx
+const triggerRef = useRef(null); // 모달을 연 버튼
+
+function close() {
+  setOpen(false);
+  triggerRef.current?.focus(); // 열었던 버튼으로 복귀
+}
+
+// keydown 핸들러 안에서
+if (e.key === "Escape") close();
+```
+
+포커스를 "연 곳으로" 되돌리는 이 대칭성이 스크린 리더 사용자에게는 결정적입니다. 방금 누른 버튼으로 돌아와야 맥락이 이어지니까요.
+
+## 5) ARIA 속성
+
+마크업으로 "이건 모달이다"라고 보조기기에 알립니다.
+
+```jsx
+<div
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="modal-title"
+>
+  <h2 id="modal-title">뉴스레터 구독</h2>
+  …
+</div>
+```
+
+- `role="dialog"` + `aria-modal="true"`: 대화상자이며 그 아래 배경은 비활성이라는 뜻
+- `aria-labelledby`: 제목 요소와 연결해, 모달이 열릴 때 스크린 리더가 제목을 읽어 줌
+
+## 6) 배경 비활성화
+
+`aria-modal="true"`가 상당 부분을 알려 주지만, 확실히 하려면 배경 콘텐츠에 `inert` 속성을 줘서 포커스·클릭·스크린 리더 접근을 모두 막습니다.
+
+```jsx
+// 모달이 열려 있는 동안 나머지 콘텐츠를 비활성화
+<main inert={open ? "" : undefined}>{children}</main>
+```
+
+`inert`는 이제 모든 최신 브라우저가 지원합니다. 배경 스크롤을 막는 `overflow: hidden` 처리까지 더하면 완성도가 올라갑니다.
+
+## 그래서, 직접 만들까?
+
+여기까지 왔으면 느끼셨을 겁니다 — 제대로 된 모달은 생각보다 챙길 게 많습니다. 여기에 **포털**(DOM 트리 상 최상단에 렌더링), 애니메이션, 중첩 모달까지 더하면 복잡도가 훌쩍 뜁니다. 그래서 실무에선 [헤드리스 컴포넌트](/posts/headless-components) 글에서 말한 Radix Dialog나 React Aria를 **동작 엔진**으로 쓰는 경우가 많습니다.
+
+그럼에도 원리를 아는 건 중요합니다. 라이브러리가 왜 `aria-modal`을 붙이고 왜 포커스를 복원하는지 알아야, 문제가 생겼을 때 디버깅할 수 있고 커스텀도 할 수 있으니까요.
+
+---
+
+접근 가능한 모달의 핵심은 "포커스를 의도적으로 관리한다"는 자세입니다. 열 때 넣고, 안에 가두고, 닫을 때 돌려준다 — 이 세 박자만 지켜도 키보드·스크린 리더 사용자의 경험이 완전히 달라집니다. 오늘 5편은 여기서 마무리합니다.
