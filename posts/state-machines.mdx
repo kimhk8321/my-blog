@@ -1,0 +1,114 @@
+---
+title: "상태 머신으로 복잡한 UI 다루기 — 불가능한 상태를 불가능하게"
+description: "isLoading·isError·isSuccess 불리언 조합이 만드는 유령 상태를 없앤다. 유한 상태 머신으로 UI를 모델링해 버그의 뿌리를 잘라내는 법을 정리합니다."
+date: "2026-07-18"
+category: "react"
+order: 3
+tags: ["상태 머신", "useReducer", "XState", "설계", "데모"]
+---
+
+폼이나 데이터 로딩을 다룰 때 이런 코드를 자주 봅니다.
+
+```jsx
+const [isLoading, setIsLoading] = useState(false);
+const [isError, setIsError] = useState(false);
+const [isSuccess, setIsSuccess] = useState(false);
+const [data, setData] = useState(null);
+```
+
+불리언 네 개. 얼핏 멀쩡해 보이지만, 조합의 수는 2⁴ = **16가지**입니다. 그중 대부분은 말이 안 됩니다. `isLoading && isError`가 동시에 참이면 뭘 보여줘야 할까요? `isSuccess && isError`는요? 이런 **불가능해야 할 상태**가 코드에서는 표현 가능하다는 게 버그의 온상입니다.
+
+**유한 상태 머신(FSM)** 은 이 문제를 정면으로 없앱니다. "이 UI가 가질 수 있는 상태는 딱 이것뿐"이라고 못 박고, 상태 사이의 **허용된 전이만** 정의하는 거죠.
+
+## 먼저 만져 보기
+
+<StateMachineDemo />
+
+상태는 `idle` → `submitting` → `success`/`error` 넷뿐이고, 각 상태에서 **허용된 이벤트 버튼만** 나타납니다. `submitting` 중엔 `SUBMIT`이 아예 없어서 중복 제출이 원천 차단되는 걸 보세요.
+
+## 발상의 전환 — 상태를 열거하다
+
+불리언의 조합이 아니라, UI가 처할 수 있는 상태를 **하나의 값으로** 표현합니다.
+
+```js
+// 이 넷 중 정확히 하나. 그 외의 상태는 존재 자체가 불가능하다.
+type State = "idle" | "submitting" | "success" | "error";
+```
+
+`isLoading && isSuccess` 같은 모순이 애초에 표현 불가능해집니다. 상태가 언제나 유효함을 타입 수준에서 보장받는 거죠. Dan Abramov가 말한 **"불가능한 상태를 불가능하게 만들라(make impossible states impossible)"** 가 정확히 이 얘기입니다.
+
+## 전이표 — 규칙을 데이터로
+
+상태 머신의 핵심은 **전이표**입니다. "어떤 상태에서 어떤 이벤트가 오면 어디로 가는가"를 데이터로 적습니다.
+
+```js
+const machine = {
+  idle: { SUBMIT: "submitting" },
+  submitting: { RESOLVE: "success", REJECT: "error" },
+  success: { RESET: "idle" },
+  error: { RETRY: "submitting", RESET: "idle" },
+};
+```
+
+읽어 보면 규칙이 그대로 보입니다. `idle`에서는 `SUBMIT`만 가능하고, `submitting`에서는 성공(`RESOLVE`) 또는 실패(`REJECT`)로만 갈 수 있죠. **표에 없는 전이는 일어나지 않습니다.**
+
+## useReducer로 구현
+
+이 표는 `useReducer`와 궁합이 완벽합니다. 리듀서가 전이표를 그대로 조회하면 되니까요.
+
+```jsx
+function reducer(state, event) {
+  return machine[state][event] ?? state; // 정의 안 된 전이는 무시
+}
+
+function SubmitForm() {
+  const [state, dispatch] = useReducer(reducer, "idle");
+
+  // submitting에 진입하면 실제 요청을 보내고 결과에 따라 전이
+  useEffect(() => {
+    if (state !== "submitting") return;
+    api.submit()
+      .then(() => dispatch("RESOLVE"))
+      .catch(() => dispatch("REJECT"));
+  }, [state]);
+
+  return (
+    <>
+      {state === "idle" && <button onClick={() => dispatch("SUBMIT")}>제출</button>}
+      {state === "submitting" && <Spinner />}
+      {state === "success" && <p>완료!</p>}
+      {state === "error" && <button onClick={() => dispatch("RETRY")}>재시도</button>}
+    </>
+  );
+}
+```
+
+`?? state`가 방어선입니다. `submitting` 상태에서 실수로 `SUBMIT`을 또 디스패치해도, 전이표에 그 경로가 없으니 **아무 일도 일어나지 않습니다.** 중복 제출 방지 로직을 따로 짤 필요가 없어지죠. 버그가 될 수 있는 경로 자체가 존재하지 않습니다.
+
+## 상태에 데이터를 붙이기
+
+실전에서는 상태마다 딸린 데이터가 다릅니다. `success`엔 결과가, `error`엔 메시지가 필요하죠. 상태와 데이터를 함께 묶으면 **판별 유니언(discriminated union)** 이 됩니다.
+
+```ts
+type State =
+  | { status: "idle" }
+  | { status: "submitting" }
+  | { status: "success"; data: User }
+  | { status: "error"; message: string };
+```
+
+이러면 `status === "success"`로 좁힌 블록에서만 `data`에 접근할 수 있습니다. `error`인데 `data`를 읽으려 하면 타입 에러가 나죠. ([타입 좁히기](/posts/typescript-narrowing) 글에서 다룬 그 기법입니다.)
+
+## XState — 규모가 커지면
+
+전이가 수십 개로 늘고, 중첩 상태(예: `submitting` 안에 `retrying`)나 병렬 상태가 필요해지면 손으로 짠 전이표는 버겁습니다. 이때 **XState** 같은 라이브러리가 등장합니다.
+
+- 상태 차트를 **시각화**해 팀과 공유
+- 진입/이탈 시 부수 효과(actions), 가드 조건, 지연 전이 등을 선언적으로
+- 프레임워크 독립적 — React 밖에서도 동일한 로직 재사용
+
+다만 작은 컴포넌트라면 `useReducer` + 전이표만으로 충분합니다. 도구보다 **사고방식**이 핵심이니까요.
+
+---
+
+상태 머신의 진짜 가치는 코드가 줄어드는 게 아니라, **버그가 될 경로를 설계 단계에서 제거**한다는 데 있습니다. 불리언을 쌓다 "이 조합이면 어떡하지?" 고민하는 대신, 가능한 상태를 열거하고 전이만 그리세요. 다음 글에서는 데이터 로딩을 선언적으로 바꾸는 [Suspense와 use()](/posts/suspense-use)로 넘어갑니다.

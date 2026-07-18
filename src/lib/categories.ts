@@ -6,6 +6,11 @@ export interface Category {
 
 export const categories: Category[] = [
   {
+    id: "retrospect",
+    label: "회고",
+    description: "학습 회고와 블로그 운영 기록",
+  },
+  {
     id: "react",
     label: "React",
     description: "모던 리액트, 컴포넌트 설계, 훅 등 React 핵심 정리",
@@ -71,9 +76,9 @@ export const categories: Category[] = [
     description: "컴퓨터 과학, 알고리즘, 웹 서버 아키텍처",
   },
   {
-    id: "retrospect",
-    label: "회고·프로젝트",
-    description: "사이드 프로젝트와 회고, 블로그 운영",
+    id: "project",
+    label: "프로젝트",
+    description: "사이드 프로젝트 개발 기록",
   },
 ];
 
