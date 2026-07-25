@@ -23,6 +23,13 @@ import { DragSortDemo } from "@/components/mdx/drag-sort-demo";
 import { StateMachineDemo } from "@/components/mdx/state-machine-demo";
 import { SuspenseUseDemo } from "@/components/mdx/suspense-use-demo";
 import { FocusTrapModalDemo } from "@/components/mdx/focus-trap-modal-demo";
+import { SignalCounterDemo } from "@/components/mdx/signal-counter-demo";
+import { UndoRedoDemo } from "@/components/mdx/undo-redo-demo";
+import { FormValidationDemo } from "@/components/mdx/form-validation-demo";
+import { AbortRaceDemo } from "@/components/mdx/abort-race-demo";
+import { IntlPlaygroundDemo } from "@/components/mdx/intl-playground-demo";
+import { CommandPaletteDemo } from "@/components/mdx/command-palette-demo";
+import { ContainerQueryDemo } from "@/components/mdx/container-query-demo";
 
 type MdxComponent = ComponentType<Record<string, unknown>>;
 
@@ -52,4 +59,11 @@ export const mdxComponents: Record<string, MdxComponent> = {
   StateMachineDemo: StateMachineDemo as MdxComponent,
   SuspenseUseDemo: SuspenseUseDemo as MdxComponent,
   FocusTrapModalDemo: FocusTrapModalDemo as MdxComponent,
+  SignalCounterDemo: SignalCounterDemo as MdxComponent,
+  UndoRedoDemo: UndoRedoDemo as MdxComponent,
+  FormValidationDemo: FormValidationDemo as MdxComponent,
+  AbortRaceDemo: AbortRaceDemo as MdxComponent,
+  IntlPlaygroundDemo: IntlPlaygroundDemo as MdxComponent,
+  CommandPaletteDemo: CommandPaletteDemo as MdxComponent,
+  ContainerQueryDemo: ContainerQueryDemo as MdxComponent,
 };
