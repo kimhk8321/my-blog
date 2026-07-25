@@ -1,0 +1,102 @@
+---
+title: "Signals — 리렌더 없이 값만 바꾸는 세밀한 반응성"
+description: "Solid·Preact가 채택한 시그널의 원리를 직접 만든다. 구독 기반으로 바뀐 값이 필요한 DOM만 갱신해, React의 컴포넌트 단위 리렌더와 무엇이 다른지 정리합니다."
+date: "2026-07-25"
+category: "react"
+order: 1
+tags: ["Signals", "반응성", "성능", "구현", "데모"]
+---
+
+React의 상태 모델은 단순하고 강력합니다. `setState` → 컴포넌트 함수 재실행 → 가상 DOM 비교 → 실제 DOM 갱신. 그런데 이 모델엔 대가가 있습니다. 값 하나가 바뀌면 그 값을 쓰는 **컴포넌트 전체가 다시 실행**됩니다. 대부분은 문제없지만, 자주 바뀌는 값(마우스 좌표, 타이머, 애니메이션)에선 낭비가 쌓입니다.
+
+**Signal**은 다른 길을 갑니다. "이 값이 바뀌면 **이 값을 실제로 쓰는 곳**만 갱신한다." Solid, Preact Signals, Vue의 반응성이 모두 이 발상 위에 있습니다. 핵심은 **구독(subscription)** 입니다.
+
+## 먼저 만져 보기
+
+<SignalCounterDemo />
+
+"Signal +1"은 숫자가 바뀌어도 컴포넌트 렌더 횟수가 그대로입니다. "React setState"만 렌더 횟수를 올리죠. 값의 변화와 컴포넌트 리렌더가 **분리**돼 있다는 뜻입니다.
+
+## 시그널의 정체 — 값 + 구독자 목록
+
+시그널은 사실 별게 아닙니다. **값 하나와, 그 값에 관심 있는 함수들(구독자)의 집합**입니다.
+
+```js
+function createSignal(initial) {
+  let value = initial;
+  const subscribers = new Set();
+
+  return {
+    get: () => value,
+    set: (next) => {
+      value = next;
+      subscribers.forEach((fn) => fn(value)); // 바뀌면 구독자에게 통지
+    },
+    subscribe: (fn) => {
+      subscribers.add(fn);
+      return () => subscribers.delete(fn); // 정리용 해제 함수
+    },
+  };
+}
+```
+
+`set`이 불리면 새 값을 저장하고 **구독자 전원에게 알립니다.** 그게 전부입니다. 위 데모에서 "Signal +1"은 이 `set`을 부르고, 구독자는 특정 DOM 노드의 텍스트만 직접 바꿉니다.
+
+```js
+const count = createSignal(0);
+
+// 이 DOM 노드는 count를 '구독'한다
+count.subscribe((v) => {
+  spanEl.textContent = v; // React를 거치지 않고 직접 갱신
+});
+
+count.set(count.get() + 1); // → spanEl만 바뀜. 컴포넌트 리렌더 없음.
+```
+
+React가 컴포넌트를 다시 실행하고 트리를 비교하는 과정이 **통째로 생략**됩니다. 바뀐 값이 어디로 흘러가는지 구독으로 이미 알고 있으니까요.
+
+## 왜 이게 "세밀한(fine-grained)" 반응성인가
+
+React는 **컴포넌트**가 반응성의 단위입니다. 값이 바뀌면 컴포넌트 함수가 다시 돕니다. 시그널은 **값 자체**가 반응성의 단위입니다. 값이 바뀌면 그 값을 읽는 **정확히 그 지점**만 갱신됩니다.
+
+```
+React:   setState → [컴포넌트 전체 재실행] → diff → DOM 갱신
+Signal:  set      → [구독한 그 DOM만] 갱신
+```
+
+그래서 리스트 1000개 중 하나의 값만 바뀌면, React는 (memo가 없으면) 관련 컴포넌트를 다시 실행하지만, 시그널은 그 한 칸의 텍스트 노드만 건드립니다.
+
+## 파생 값 — computed
+
+시그널의 진짜 힘은 **파생(derived)** 에서 나옵니다. 다른 시그널에 의존하는 계산값을 만들고, 의존하는 시그널이 바뀔 때만 다시 계산합니다.
+
+```js
+function computed(fn, deps) {
+  const result = createSignal(fn());
+  deps.forEach((dep) => dep.subscribe(() => result.set(fn())));
+  return result;
+}
+
+const price = createSignal(1000);
+const qty = createSignal(2);
+const total = computed(() => price.get() * qty.get(), [price, qty]);
+// price나 qty가 바뀔 때만 total 재계산 → total 구독자에게 통지
+```
+
+Solid는 여기서 한 걸음 더 나아가, `fn` 실행 중 어떤 시그널을 읽는지 **자동으로 추적**해 의존성 배열조차 필요 없게 만듭니다. 하지만 뼈대는 위와 똑같습니다.
+
+## React와 함께 쓸 때
+
+React 안에서 외부 스토어(시그널 포함)를 구독하는 공식 창구는 `useSyncExternalStore`입니다. ([상태관리 라이브러리 직접 만들기](/posts/build-state-library)에서 다룬 그 훅입니다.)
+
+```jsx
+function useSignal(signal) {
+  return useSyncExternalStore(signal.subscribe, signal.get, signal.get);
+}
+```
+
+다만 이렇게 하면 그 훅을 쓴 **컴포넌트는 리렌더**됩니다 — React의 규칙 안으로 들어오니까요. 진짜 "리렌더 없는" 갱신은 데모처럼 DOM을 직접 만질 때 얻어집니다. React 19의 방향과 React Compiler는 이 간극을 좁히려는 시도이기도 합니다.
+
+---
+
+시그널은 "무엇이 바뀌면 무엇이 갱신되는가"를 **값 단위로 명시**하는 모델입니다. React의 컴포넌트 단위 모델과 우열이 아니라 트레이드오프죠 — 단순함 대 세밀함. 원리를 알면 두 세계를 필요에 맞게 오갈 수 있습니다. 다음 글에서는 커맨드 패턴으로 [Undo/Redo](/posts/undo-redo)를 구현합니다.
