@@ -16,6 +16,11 @@ export const categories: Category[] = [
     description: "모던 리액트, 컴포넌트 설계, 훅 등 React 핵심 정리",
   },
   {
+    id: "nextjs",
+    label: "Next.js",
+    description: "App Router, 서버 컴포넌트, 캐싱, 서버 액션 등 Next.js 정리",
+  },
+  {
     id: "javascript",
     label: "JavaScript",
     description: "모던 자바스크립트 Deep Dive 기반 JS 기초·심화",

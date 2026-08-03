@@ -1,10 +1,10 @@
 ---
 title: "Next.js 데이터 패칭과 캐싱"
-description: "서버 컴포넌트에서의 fetch, 캐시와 재검증(revalidate), 동적 렌더링, 그리고 변경(Server Actions)까지 App Router의 데이터 흐름을 정리합니다."
+description: "서버 컴포넌트에서의 fetch, use cache 기반 캐싱, 그리고 변경(Server Actions)까지 App Router의 데이터 흐름을 Next.js 16 기준으로 정리합니다."
 date: "2026-06-28"
 order: 28
 migrated: true
-category: "architecture"
+category: "nextjs"
 tags: ["Next.js", "데이터 패칭", "캐싱", "Server Actions"]
 ---
 
@@ -22,42 +22,31 @@ export default async function Page() {
 }
 ```
 
-## 캐싱과 재검증
+## 캐싱 — 기본은 캐시 안 함
 
-Next.js는 `fetch` 결과를 캐싱합니다. 옵션으로 동작을 조절합니다.
-
-```tsx
-// 1) 기본 — 빌드 시 캐시 (정적, SSG처럼 동작)
-await fetch(url);
-
-// 2) 매 요청마다 새로 (캐시 안 함, SSR처럼 동작)
-await fetch(url, { cache: "no-store" });
-
-// 3) 주기적 재검증 (ISR처럼 동작) — 60초마다 백그라운드 갱신
-await fetch(url, { next: { revalidate: 60 } });
-```
-
-페이지 단위로도 설정할 수 있습니다.
+한때 App Router의 `fetch`는 **기본으로 캐시**됐지만, **Next.js 16부터는 반대**입니다. `fetch`는 기본적으로 캐시되지 않고 매 요청마다 새로 가져옵니다. 예측 가능해진 대신, 캐시가 필요하면 **직접 선언**해야 하죠.
 
 ```tsx
-export const revalidate = 60; // 이 라우트의 기본 재검증 주기
-export const dynamic = "force-dynamic"; // 항상 동적 렌더링
+// 기본 — 캐시 안 함 (매 요청마다 새로)
+const posts = await fetch(url).then((r) => r.json());
 ```
 
-> 이 캐싱 옵션들이 곧 [CSR/SSR/SSG/ISR](/posts/ssr-rendering) 전략을 **요청 단위로** 선택하는 수단입니다.
-
-## 태그 기반 재검증
-
-데이터를 변경한 뒤, 관련 캐시만 무효화할 수 있습니다.
+캐시하려면 **`use cache`** 지시어로 함수나 컴포넌트의 반환값을 캐시합니다. 수명은 `cacheLife`, 무효화용 태그는 `cacheTag`로 붙입니다.
 
 ```tsx
-// 패칭 시 태그 부여
-await fetch(url, { next: { tags: ["posts"] } });
+import { cacheLife, cacheTag } from "next/cache";
 
-// 변경 후 해당 태그 무효화
-import { revalidateTag } from "next/cache";
-revalidateTag("posts");
+async function getPosts() {
+  "use cache";
+  cacheLife("hours"); // 얼마나 살아있을지
+  cacheTag("posts");  // 무효화용 태그
+  return db.query("SELECT * FROM posts");
+}
 ```
+
+데이터를 바꾼 뒤엔 `revalidateTag("posts")`로 그 캐시만 지웁니다. 반대로 **매번 신선해야 하는 데이터**는 캐시하지 말고 `<Suspense>`로 감싸 스트리밍하죠.
+
+> 캐싱 모델은 Next.js 16에서 크게 바뀌었습니다. `use cache`·`cacheLife`·태그 무효화·스트리밍의 자세한 내용은 [Next.js 16 캐싱](/posts/nextjs-caching) 글에서 다룹니다. 정적/동적 렌더링의 큰 그림은 [렌더링 전략](/posts/ssr-rendering)과 연결됩니다.
 
 ## Server Actions — 변경 처리
 
@@ -89,10 +78,12 @@ export default function NewPost() {
 }
 ```
 
+> 인증·`useActionState`·낙관적 업데이트 등 서버 액션의 실전 패턴은 [Server Actions](/posts/nextjs-server-actions) 글에서 더 깊이 다룹니다.
+
 ## 클라이언트에서의 패칭
 
 상호작용 중 발생하는 패칭(무한 스크롤, 실시간 등)은 여전히 클라이언트에서 합니다. 이때는 [React Query](/posts/react-query)를 쓰면 캐싱·리페치를 깔끔하게 다룰 수 있습니다.
 
 ---
 
-App Router의 데이터 흐름은 "**읽기는 서버 컴포넌트의 `fetch`, 캐싱은 옵션으로, 변경은 Server Actions**"로 요약됩니다. 캐시·재검증 옵션을 이해하면 정적의 속도와 동적의 신선함을 상황에 맞게 조합할 수 있습니다.
+App Router의 데이터 흐름은 "**읽기는 서버 컴포넌트의 `fetch`, 캐싱은 `use cache`로 명시, 변경은 Server Actions**"로 요약됩니다. 무엇을 캐시하고 무엇을 스트리밍할지만 정하면 정적의 속도와 동적의 신선함을 상황에 맞게 조합할 수 있습니다.

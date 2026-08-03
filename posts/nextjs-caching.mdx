@@ -1,0 +1,143 @@
+---
+title: "Next.js 16 캐싱 — use cache와 Cache Components"
+description: "예전의 '기본 캐시'는 사라졌다. Next.js 16의 use cache 지시어, cacheLife·cacheTag, 그리고 Suspense 스트리밍으로 재편된 캐싱 모델을 정리합니다."
+date: "2026-08-01"
+category: "nextjs"
+order: 7
+tags: ["Next.js", "캐싱", "use cache", "Cache Components"]
+---
+
+Next.js의 캐싱은 오랫동안 "너무 똑똑해서 헷갈리는" 영역이었습니다. `fetch`가 언제 캐시되는지, `revalidate`가 어디에 붙는지 외우기 어려웠죠. **Next.js 16**은 이 모델을 크게 갈아엎었습니다. 핵심은 두 가지 — **기본값이 '캐시 안 함'으로 바뀌었고**, 캐시하고 싶은 것은 **`use cache`** 로 명시합니다.
+
+> 예전 App Router에선 `fetch`가 **기본으로 캐시**됐습니다. 16에서는 반대입니다. 습관을 뒤집어야 합니다.
+
+## 새 기본값 — fetch는 캐시되지 않는다
+
+```tsx
+export default async function Page() {
+  const res = await fetch("https://api.example.com/posts");
+  const posts = await res.json();
+  // 이 fetch는 캐시되지 않는다. 매 요청마다 새로 가져온다.
+}
+```
+
+명시적이라 예측 가능합니다. 캐시가 필요하면 이제 **직접 선언**합니다.
+
+## use cache — 캐시를 선언하다
+
+`use cache` 지시어는 **함수나 컴포넌트의 반환값**을 캐시합니다. 두 수준에서 쓸 수 있습니다.
+
+**① 데이터 수준** — 데이터를 가져오는 함수에
+
+```tsx filename="app/lib/data.ts"
+import { cacheLife } from "next/cache";
+
+export async function getUsers() {
+  "use cache";
+  cacheLife("hours"); // 얼마나 살아있을지
+  return db.query("SELECT * FROM users");
+}
+```
+
+**② UI 수준** — 컴포넌트·페이지·레이아웃 전체에
+
+```tsx filename="app/page.tsx"
+export default async function Page() {
+  "use cache";
+  const users = await db.query("SELECT * FROM users");
+  return <UserList users={users} />;
+}
+```
+
+함수에 넘긴 **인자와 클로저로 잡힌 값이 자동으로 캐시 키**가 됩니다. 그래서 `getUser(id)`처럼 인자가 다르면 별도 캐시 항목이 되죠. 파라미터화된 캐시가 공짜로 됩니다.
+
+이 기능은 `next.config.ts`에서 켭니다.
+
+```ts filename="next.config.ts"
+const nextConfig = { cacheComponents: true };
+export default nextConfig;
+```
+
+## cacheLife — 얼마나 오래 살까
+
+`cacheLife`는 캐시 수명을 정합니다. 프로필 이름이나 세밀한 객체를 받죠.
+
+```tsx
+"use cache";
+cacheLife("hours"); // seconds · minutes · hours · days · weeks · max
+
+// 또는 직접 지정
+cacheLife({
+  stale: 3600,     // 1시간: 이 동안은 재검증 없이 제공
+  revalidate: 7200, // 2시간: 백그라운드 재검증 주기
+  expire: 86400,   // 1일: 이 후엔 만료(반드시 새로)
+});
+```
+
+`stale`·`revalidate`·`expire` 세 값이 SWR(stale-while-revalidate) 흐름을 만듭니다. stale 이내면 그냥 주고, 지나면 낡은 걸 주면서 뒤에서 갱신하고, expire를 넘기면 새로 가져옵니다.
+
+## cacheTag — 태그로 무효화하기
+
+시간이 아니라 **이벤트**로 캐시를 지우고 싶을 때(예: 글을 수정하면 그 목록 캐시를 즉시 무효화) `cacheTag`로 꼬리표를 답니다.
+
+```tsx filename="app/lib/data.ts"
+import { cacheTag } from "next/cache";
+
+export async function getProducts() {
+  "use cache";
+  cacheTag("products");
+  return db.query("SELECT * FROM products");
+}
+```
+
+그리고 데이터를 바꾼 뒤(주로 [Server Action](/posts/nextjs-server-actions) 안에서) 그 태그를 무효화합니다.
+
+```tsx
+import { revalidateTag } from "next/cache";
+
+async function addProduct(/* … */) {
+  "use server";
+  // …DB에 저장…
+  revalidateTag("products"); // 'products' 태그 캐시를 지운다
+}
+```
+
+경로 단위로 지우려면 `revalidatePath("/products")`도 있습니다. 같은 요청 안에서 즉시 최신을 보여줘야 하면 `updateTag`를 씁니다.
+
+## 캐시하지 않을 것 — Suspense로 스트리밍
+
+매 요청마다 신선해야 하는 데이터엔 `use cache`를 **쓰지 않습니다.** 대신 `<Suspense>`로 감싸 스트리밍합니다.
+
+```tsx
+import { Suspense } from "react";
+
+async function LatestPosts() {
+  const posts = await fetch("https://api.example.com/posts").then((r) => r.json());
+  return <PostList posts={posts} />;
+}
+
+export default function Page() {
+  return (
+    <>
+      <h1>블로그</h1>
+      <Suspense fallback={<p>불러오는 중…</p>}>
+        <LatestPosts /> {/* 준비되면 스트리밍으로 채워짐 */}
+      </Suspense>
+    </>
+  );
+}
+```
+
+서버가 먼저 껍데기(+fallback)를 보내고, 데이터가 준비되면 그 부분만 흘려보냅니다. [Suspense와 use()](/posts/suspense-use) 글에서 본 그 스트리밍이 서버 렌더링에서도 그대로 쓰입니다.
+
+## 정리 — 세 갈래로 생각하기
+
+Next.js 16의 캐싱은 결국 **데이터를 세 부류로 나누는** 일입니다.
+
+- **거의 안 바뀌는 것** → `use cache` + `cacheLife("days")`
+- **가끔 바뀌는 것(수정 시점을 아는 것)** → `use cache` + `cacheTag` + 변경 후 `revalidateTag`
+- **매번 신선해야 하는 것** → 캐시하지 말고 `<Suspense>`로 스트리밍
+
+---
+
+예전의 "알아서 캐시" 모델이 편했지만 예측이 어려웠다면, 16의 "명시적 캐시" 모델은 손이 조금 더 가는 대신 **어디에 무엇이 캐시되는지 코드에 드러납니다.** 습관만 뒤집으면 훨씬 다루기 쉽죠. 다음 글에서는 데이터를 바꾸는 [Server Actions](/posts/nextjs-server-actions)로 넘어갑니다.

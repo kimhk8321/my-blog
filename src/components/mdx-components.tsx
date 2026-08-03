@@ -30,6 +30,12 @@ import { AbortRaceDemo } from "@/components/mdx/abort-race-demo";
 import { IntlPlaygroundDemo } from "@/components/mdx/intl-playground-demo";
 import { CommandPaletteDemo } from "@/components/mdx/command-palette-demo";
 import { ContainerQueryDemo } from "@/components/mdx/container-query-demo";
+import { SpringFollowDemo } from "@/components/mdx/spring-follow-demo";
+import { ParticleCanvasDemo } from "@/components/mdx/particle-canvas-demo";
+import { TreeViewDemo } from "@/components/mdx/tree-view-demo";
+import { LiveRegionToastDemo } from "@/components/mdx/live-region-toast-demo";
+import { RegexTesterDemo } from "@/components/mdx/regex-tester-demo";
+import { ComboboxDemo } from "@/components/mdx/combobox-demo";
 
 type MdxComponent = ComponentType<Record<string, unknown>>;
 
@@ -66,4 +72,10 @@ export const mdxComponents: Record<string, MdxComponent> = {
   IntlPlaygroundDemo: IntlPlaygroundDemo as MdxComponent,
   CommandPaletteDemo: CommandPaletteDemo as MdxComponent,
   ContainerQueryDemo: ContainerQueryDemo as MdxComponent,
+  SpringFollowDemo: SpringFollowDemo as MdxComponent,
+  ParticleCanvasDemo: ParticleCanvasDemo as MdxComponent,
+  TreeViewDemo: TreeViewDemo as MdxComponent,
+  LiveRegionToastDemo: LiveRegionToastDemo as MdxComponent,
+  RegexTesterDemo: RegexTesterDemo as MdxComponent,
+  ComboboxDemo: ComboboxDemo as MdxComponent,
 };
