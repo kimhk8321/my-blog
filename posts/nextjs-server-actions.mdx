@@ -1,0 +1,131 @@
+---
+title: "Server Actions로 데이터 변경하기"
+description: "API 라우트 없이 서버 함수를 폼에 직접 연결한다. use server 지시어로 만드는 서버 액션의 기본과, 인증·재검증·낙관적 업데이트까지 실전 패턴을 정리합니다."
+date: "2026-08-01"
+category: "nextjs"
+order: 8
+tags: ["Next.js", "Server Actions", "서버 함수", "폼"]
+---
+
+전통적으로 데이터를 바꾸려면 API 엔드포인트를 만들고, 클라이언트에서 `fetch`로 호출하고, 응답을 받아 상태를 갱신하고, 캐시를 무효화했습니다. Next.js의 **Server Actions**(서버 액션)는 이 왕복을 하나로 줄입니다. **서버에서 도는 함수를 폼에 직접 연결**하는 거죠.
+
+## 서버 함수란
+
+**서버 함수(Server Function)** 는 서버에서 실행되는 비동기 함수입니다. 클라이언트에서 호출하면 네트워크 요청으로 서버에서 실행되죠. 폼 제출·데이터 변경 맥락에서 쓰면 **서버 액션(Server Action)** 이라 부릅니다.
+
+`use server` 지시어로 만듭니다.
+
+```ts filename="app/lib/actions.ts"
+export async function createPost(formData: FormData) {
+  "use server";
+
+  const title = formData.get("title");
+  const content = formData.get("content");
+
+  // DB에 저장…
+}
+```
+
+파일 맨 위에 `"use server"`를 두면 그 파일의 **모든 export가 서버 함수**가 됩니다.
+
+## 폼에 직접 연결
+
+서버 액션의 매력은 `<form>`의 `action` 속성에 **함수를 그대로 넘기는** 것입니다.
+
+```tsx filename="app/page.tsx"
+import { createPost } from "@/lib/actions";
+
+export default function Page() {
+  return (
+    <form action={createPost}>
+      <input name="title" />
+      <textarea name="content" />
+      <button type="submit">작성</button>
+    </form>
+  );
+}
+```
+
+JavaScript가 로드되기 전에도 폼이 동작합니다(점진적 향상). 액션은 내부적으로 **POST**로 실행되고, `startTransition`으로 감싸져 대기 상태(pending)를 자동 관리합니다.
+
+## ⚠️ 인증은 함수 안에서 반드시
+
+가장 중요한 보안 원칙입니다. 서버 액션은 **UI를 거치지 않고 직접 POST 요청으로도 호출**될 수 있습니다. 버튼을 숨긴다고 안전한 게 아니에요. **모든 서버 함수 안에서 인증·인가를 직접 확인**해야 합니다.
+
+```ts
+export async function deletePost(formData: FormData) {
+  "use server";
+  const session = await auth();
+  if (!session?.user) throw new Error("Unauthorized"); // 필수
+
+  const id = formData.get("id");
+  // 이 사용자가 이 글의 주인인지까지 확인 후 삭제
+}
+```
+
+## 변경 후 — 캐시 재검증
+
+데이터를 바꿨으면 관련 캐시를 무효화해 화면을 최신으로 만듭니다. [캐싱 글](/posts/nextjs-caching)에서 본 `revalidateTag`·`revalidatePath`를 여기서 씁니다.
+
+```ts
+import { revalidateTag, redirect } from "next/cache";
+
+export async function createPost(formData: FormData) {
+  "use server";
+  // …저장…
+  revalidateTag("posts");   // 'posts' 캐시 무효화
+  redirect("/posts");       // 목록으로 이동
+}
+```
+
+액션 한 번으로 **변경 → 재검증 → 갱신된 UI**가 한 번의 서버 왕복에 처리됩니다.
+
+## 상태와 함께 — useActionState
+
+에러 메시지나 결과를 화면에 표시하려면 React의 `useActionState`로 액션을 감쌉니다.
+
+```tsx
+"use client";
+import { useActionState } from "react";
+import { createPost } from "@/lib/actions";
+
+export function Form() {
+  const [state, action, pending] = useActionState(createPost, null);
+  return (
+    <form action={action}>
+      <input name="title" />
+      <button disabled={pending}>{pending ? "저장 중…" : "작성"}</button>
+      {state?.error && <p className="error">{state.error}</p>}
+    </form>
+  );
+}
+```
+
+`pending`으로 버튼을 비활성화하고, 액션이 반환한 `state`로 결과를 표시합니다.
+
+## 낙관적 업데이트와의 결합
+
+서버 액션은 [낙관적 업데이트](/posts/optimistic-updates)와 궁합이 완벽합니다. `useOptimistic`으로 응답을 기다리지 않고 UI를 먼저 바꾸고, 액션이 트랜잭션을 감싸주니 실패 시 롤백도 자연스럽습니다.
+
+```tsx
+const [optimistic, addOptimistic] = useOptimistic(comments, (list, text) => [
+  ...list,
+  { text, sending: true },
+]);
+
+async function action(formData: FormData) {
+  addOptimistic(formData.get("text")); // 즉시 반영
+  await addComment(formData);           // 서버 액션
+}
+```
+
+## Server Actions vs Route Handlers
+
+"그럼 API는 언제 만들지?" 싶을 겁니다. 기준은 이렇습니다.
+
+- **내 앱의 폼·버튼에서 데이터 변경** → 서버 액션 (더 간결)
+- **외부 클라이언트·웹훅·서드파티가 호출하는 공개 API** → [Route Handlers](/posts/nextjs-route-handlers)
+
+---
+
+Server Actions의 핵심은 "**서버 코드를 클라이언트 이벤트에 직접 연결**"하는 것입니다. API 라우트라는 중간 다리를 없애 코드가 간결해지죠. 단, 편해진 만큼 **인증을 함수 안에서 챙기는 것**을 절대 잊지 마세요. 다음 글에서는 진짜 API가 필요할 때 쓰는 [Route Handlers](/posts/nextjs-route-handlers)를 봅니다.
