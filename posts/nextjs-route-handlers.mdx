@@ -1,0 +1,112 @@
+---
+title: "Route Handlers — App Router의 API 만들기"
+description: "route.ts 하나로 웹 표준 Request/Response 기반 API를 만든다. GET·POST 처리, NextRequest/NextResponse, 캐싱, 그리고 Server Actions와의 역할 분담을 정리합니다."
+date: "2026-08-01"
+category: "nextjs"
+order: 9
+tags: ["Next.js", "Route Handlers", "API", "route.ts"]
+---
+
+[Server Actions](/posts/nextjs-server-actions)가 "내 앱의 폼에서 서버 함수 호출"이라면, **Route Handlers**는 진짜 **HTTP API 엔드포인트**입니다. 웹훅을 받거나, 모바일 앱·외부 서비스에 데이터를 제공하거나, 파일을 스트리밍할 때 씁니다. `pages` 시절의 API Routes를 App Router 방식으로 대체한 것이죠.
+
+## 규칙 — route.ts
+
+`app` 디렉터리 안에 **`route.ts`**(또는 `.js`) 파일을 두고, HTTP 메서드 이름의 함수를 export합니다.
+
+```ts filename="app/api/posts/route.ts"
+export async function GET(request: Request) {
+  const posts = await db.query("SELECT * FROM posts");
+  return Response.json(posts);
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const created = await db.insert(body);
+  return Response.json(created, { status: 201 });
+}
+```
+
+이 파일은 `/api/posts` 경로에 매핑됩니다. `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`를 지원하고, 지원 안 하는 메서드로 오면 자동으로 **405**를 반환합니다.
+
+> **한 가지 규칙**: 같은 경로 세그먼트에 `page.tsx`와 `route.ts`를 **동시에 둘 수 없습니다.** 한 URL은 페이지이거나 API이거나 둘 중 하나죠.
+
+## 웹 표준 위에 서다
+
+Route Handler는 특별한 프레임워크 객체가 아니라 **웹 표준 `Request`/`Response`** 를 씁니다. 그래서 브라우저·Deno·서버리스 어디서 배운 지식이든 그대로 통합니다.
+
+```ts
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const query = searchParams.get("q"); // ?q=... 읽기
+
+  return new Response(JSON.stringify({ query }), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+```
+
+`Response.json()`은 편의 헬퍼고, 더 세밀하게는 표준 `Response`를 직접 만들면 됩니다.
+
+## NextRequest / NextResponse
+
+기본 `Request`/`Response`로 충분하지만, 쿠키·리다이렉트 같은 편의가 필요하면 `next/server`의 확장판을 씁니다.
+
+```ts filename="app/api/me/route.ts"
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(request: NextRequest) {
+  const token = request.cookies.get("token")?.value; // 쿠키 헬퍼
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return NextResponse.json({ user: await getUser(token) });
+}
+```
+
+## 캐싱 — 기본은 캐시 안 함
+
+Route Handler는 **기본적으로 캐시되지 않습니다.** 매 요청마다 실행되죠. `GET`만은 정적으로 캐시하도록 열 수 있습니다.
+
+```ts filename="app/items/route.ts"
+export const dynamic = "force-static"; // GET 응답을 빌드 시점에 정적으로
+
+export async function GET() {
+  const data = await fetch("https://api.example.com/items").then((r) => r.json());
+  return Response.json(data);
+}
+```
+
+`POST`·`DELETE` 같은 변경 메서드는 캐시되지 않습니다(당연하죠).
+
+## 동적 세그먼트
+
+URL의 일부를 파라미터로 받으려면 폴더 이름에 대괄호를 씁니다. Next.js 최신 버전에선 `params`가 **비동기(Promise)** 라 `await`합니다.
+
+```ts filename="app/api/posts/[id]/route.ts"
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params; // await 필요
+  const post = await db.findPost(id);
+  if (!post) return new Response("Not Found", { status: 404 });
+  return Response.json(post);
+}
+```
+
+## 언제 Route Handler, 언제 Server Action?
+
+둘 다 서버 코드를 부르지만 용도가 다릅니다.
+
+| | Server Actions | Route Handlers |
+| --- | --- | --- |
+| 호출 주체 | 내 앱의 폼·버튼 | 누구나(외부 포함) |
+| 메서드 | POST(고정) | GET·POST·PUT… 전부 |
+| 쓰기 좋은 곳 | 폼 제출, 데이터 변경 | 공개 API, 웹훅, 파일·스트림 |
+| 반환 | UI + 데이터 | 표준 HTTP 응답(JSON 등) |
+
+내 앱 안에서 데이터를 바꾸는 대부분의 경우는 **Server Action이 더 간결**합니다. Route Handler는 "**HTTP로 노출된 공개 창구**"가 필요할 때 꺼내는 도구예요. ([BFF 패턴](/posts/bff-pattern) 글의 그 창구가 여기서 만들어집니다.)
+
+---
+
+Route Handler의 미덕은 "**웹 표준 Request/Response 그대로**"입니다. 프레임워크 특유의 API를 새로 외울 필요 없이, `route.ts`에 메서드 함수를 export하면 그게 곧 엔드포인트죠. 다음 글에서는 검색·공유를 좌우하는 [메타데이터와 OG 이미지](/posts/nextjs-metadata)를 봅니다.
