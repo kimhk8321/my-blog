@@ -1,0 +1,86 @@
+---
+title: "접근성 콤보박스 — 자동완성을 제대로 만들기"
+description: "그냥 input에 목록 붙이면 될 것 같지만, 키보드와 스크린리더까지 챙기면 이야기가 다르다. WAI-ARIA 콤보박스 패턴으로 접근 가능한 자동완성을 구현합니다."
+date: "2026-08-01"
+category: "react"
+order: 6
+tags: ["접근성", "콤보박스", "자동완성", "ARIA", "데모"]
+---
+
+검색창에 타이핑하면 아래로 추천 목록이 뜨는 **자동완성(콤보박스)** 은 어디에나 있습니다. 만들기도 쉬워 보이죠 — `input` 아래에 `div`로 목록 붙이고 클릭하면 채우면 되니까. 하지만 그렇게 만든 콤보박스는 **키보드로 못 쓰고, 스크린리더는 아무것도 모릅니다.**
+
+제대로 된 콤보박스는 마우스뿐 아니라 화살표 키로 조작되고, 보조기기가 "지금 몇 번째 항목, 전체 몇 개 중"을 읽어 줘야 합니다. WAI-ARIA가 이 패턴을 표준화해 뒀죠.
+
+## 먼저 만져 보기
+
+<ComboboxDemo />
+
+타이핑해 목록을 걸러내고 **↑↓** 로 이동, **Enter** 로 선택, **Esc** 로 닫아 보세요. 마우스 없이 완전히 조작됩니다.
+
+## 세 개의 ARIA 역할
+
+콤보박스는 세 요소의 조합입니다.
+
+- **입력창**: `role="combobox"` — "이건 목록을 여는 입력이다"
+- **목록**: `role="listbox"` — 추천 컨테이너
+- **각 항목**: `role="option"` — 선택 가능한 옵션
+
+```jsx
+<input
+  role="combobox"
+  aria-expanded={open}          // 목록이 열렸나
+  aria-controls={listId}        // 어떤 목록을 제어하나
+  aria-autocomplete="list"      // 목록형 자동완성
+  aria-activedescendant={open ? `${listId}-${active}` : undefined}
+/>
+<ul id={listId} role="listbox">
+  {filtered.map((opt, i) => (
+    <li id={`${listId}-${i}`} role="option" aria-selected={i === active}>
+      {opt}
+    </li>
+  ))}
+</ul>
+```
+
+## 핵심 트릭 — aria-activedescendant
+
+여기가 콤보박스의 심장입니다. 목록에서 화살표로 항목을 훑을 때, **포커스는 계속 입력창에 있어야** 타이핑을 이어갈 수 있습니다. 그런데 포커스가 입력창에 있으면 스크린리더는 목록의 "활성 항목"을 어떻게 알까요?
+
+**`aria-activedescendant`** 가 답입니다. 입력창에 "지금 활성인 항목의 id는 이것"이라고 가리키면, 포커스는 입력창에 두면서도 스크린리더는 그 항목을 읽습니다.
+
+```jsx
+aria-activedescendant={`${listId}-${active}`}
+```
+
+`active`(활성 인덱스)가 바뀔 때마다 이 id가 바뀌고, 스크린리더가 해당 항목을 읽어 줍니다. **포커스는 안 옮기고 "활성"만 옮기는** 것 — 이게 목록형 위젯 접근성의 핵심 기법입니다.
+
+## 키보드 — 활성 인덱스 하나로
+
+키보드 조작은 [커맨드 팔레트](/posts/command-palette)와 같은 패턴입니다. `active` 인덱스를 화살표로 옮기고 Enter로 확정합니다.
+
+```jsx
+const onKeyDown = (e) => {
+  if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, filtered.length - 1)); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+  else if (e.key === "Enter") { if (open) choose(filtered[active]); }
+  else if (e.key === "Escape") { setOpen(false); }
+};
+```
+
+`ArrowDown`/`Up`의 `preventDefault`는 필수입니다. 안 그러면 화살표가 목록 이동과 **입력 커서 이동을 동시에** 일으킵니다.
+
+## 자주 놓치는 디테일
+
+- **검색어가 바뀌면 `active`를 0으로.** 목록이 줄었는데 활성 인덱스가 범위를 벗어나면 엉뚱한 걸 선택합니다.
+- **blur 시 목록 닫기에 약간의 지연.** 항목을 마우스로 클릭하는 순간 input이 blur돼 목록이 사라지면 클릭이 씹힙니다. `onMouseDown`에서 `preventDefault`하거나 닫힘을 약간 늦춥니다.
+- **항목 클릭은 `onMouseDown`으로.** `onClick`은 blur 이후라 놓치기 쉽습니다.
+
+## 직접 만들까, 라이브러리를 쓸까
+
+솔직히 프로덕션에선 Downshift, React Aria, Radix Combobox 같은 검증된 라이브러리를 쓰는 경우가 많습니다. 위의 디테일에 더해 화면 밖 항목 자동 스크롤, 타입어헤드, 다중 선택까지 챙기면 복잡도가 훌쩍 뛰거든요. ([헤드리스 컴포넌트](/posts/headless-components) 글에서 말한 그 이유죠.)
+
+그래도 한 번 직접 만들어 보면, 라이브러리가 왜 `aria-activedescendant`를 쓰고 왜 포커스를 입력창에 붙들어 두는지 이해하게 됩니다. 그 이해가 있어야 라이브러리를 제대로 쓰고 커스텀할 수 있고요.
+
+---
+
+접근성 콤보박스의 핵심은 "**포커스는 입력창에, 활성은 `aria-activedescendant`로**"입니다. 이 한 가지 기법이 목록형 위젯 전반(콤보박스·그리드·트리)의 접근성을 관통하죠. 이번 주 6편은 여기서 마무리합니다.
