@@ -1,0 +1,108 @@
+---
+title: "블로그에 조회수 붙이기 — Redis INCR과 하루 1회 카운팅"
+description: "어떤 글이 읽히는지 궁금해서 조회수를 달았다. Redis의 원자적 INCR로 세고, Route Handler로 API를 만들고, localStorage로 하루 1회만 카운트하고, 저장소가 없어도 죽지 않게 만든 기록입니다."
+date: "2026-08-08"
+category: "project"
+order: 1
+tags: ["프로젝트", "Redis", "조회수", "Next.js"]
+---
+
+글을 꾸준히 쌓다 보니 **"어떤 글이 실제로 읽히지?"** 가 궁금해졌습니다. 방문 통계 도구를 붙일 수도 있지만, 각 글 밑에 **조회수**를 직접 표시하고 싶었어요. 마침 서버 쪽을 만져볼 좋은 핑계이기도 했고요. 이 글은 이 블로그에 조회수를 붙인 과정의 기록입니다.
+
+## 무엇으로 셀까 — Redis의 원자적 INCR
+
+조회수는 "숫자 하나를 안전하게 +1" 하는 일입니다. 여러 방문이 **동시에** 들어와도 값이 꼬이면 안 되죠. DB에 `UPDATE ... SET count = count + 1` 을 할 수도 있지만, 카운터에는 더 가벼운 도구가 있습니다 — Redis의 **`INCR`** 입니다.
+
+`INCR`은 **원자적(atomic)** 입니다. 동시에 100개의 요청이 들어와도 정확히 100이 오릅니다. "읽고 → 더하고 → 저장" 사이에 남이 끼어드는 [경쟁 상태](/posts/transactions-isolation)를 Redis가 알아서 막아주죠. 카운터에 이보다 잘 맞는 도구가 없습니다.
+
+저장소는 **Upstash**(서버리스 Redis)를 골랐습니다. Vercel 같은 서버리스 환경에선 요청마다 연결이 뜨고 지는데, Upstash는 **HTTP(REST)로 호출**해서 커넥션 관리가 필요 없거든요.
+
+```ts filename="lib/redis.ts"
+import { Redis } from "@upstash/redis";
+
+const url = process.env.UPSTASH_REDIS_REST_URL;
+const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+// 환경변수가 있을 때만 클라이언트를 만든다. 없으면 null.
+export const redis = url && token ? new Redis({ url, token }) : null;
+```
+
+## API — 읽기와 증가를 나누기
+
+[Next.js Route Handler](/posts/nextjs-route-handlers)로 `api/views/[slug]` 하나를 만들고, 동작을 둘로 나눴습니다.
+
+- **`GET`** — 조회수를 **읽기만** (증가 없음)
+- **`POST`** — 조회수를 **1 증가**
+
+읽기와 상태 변경을 메서드로 구분하는 [REST의 기본](/posts/rest-api-design)을 그대로 따랐어요. 그리고 중요한 한 가지 — **아무 slug나 키로 만들지 못하게** 실제 존재하는 글인지 검사했습니다. 안 그러면 `api/views/아무거나`로 쓰레기 키를 무한히 만들 수 있으니까요. ([서버는 입력을 믿지 않는다.](/posts/server-security))
+
+```ts filename="app/api/views/[slug]/route.ts"
+function isValidSlug(slug: string) {
+  return getAllPostSlugs().includes(slug); // 임의 키 생성 방지
+}
+
+export async function POST(_req: Request, { params }) {
+  const { slug } = await params;
+  if (!redis || !isValidSlug(slug)) return NextResponse.json({ views: null });
+  try {
+    const views = await redis.incr(`views:${slug}`); // 원자적 +1
+    return NextResponse.json({ views });
+  } catch {
+    return NextResponse.json({ views: null }); // 오류 시 조용히 비활성화
+  }
+}
+```
+
+## 하루 1회만 세기 — 새로고침 어뷰징 막기
+
+첫 버전은 **페이지가 뜰 때마다 `POST`** 했습니다. 그랬더니 F5 한 번에 조회수가 쭉쭉 오르더군요. 내가 내 글을 열 때마다도 오르고요. 의미 있는 숫자가 아니었습니다.
+
+그래서 **같은 방문자는 하루에 한 번만** 세도록 바꿨습니다. 서버에 방문자별 상태를 두는 대신, 브라우저 **localStorage에 "마지막으로 센 날짜"** 를 저장해 간단히 해결했어요.
+
+- 오늘 날짜와 저장된 날짜가 **다르면** → `POST`(증가)하고 오늘 날짜 기록
+- **같으면** → `GET`(읽기만)
+
+```tsx filename="components/view-counter.tsx"
+const key = `viewed:${slug}`;
+const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+let countedToday = false;
+try {
+  countedToday = localStorage.getItem(key) === today;
+  if (!countedToday) localStorage.setItem(key, today);
+} catch {}
+
+// 오늘 이미 셌으면 읽기만, 아니면 증가
+fetch(`/api/views/${slug}`, { method: countedToday ? "GET" : "POST" });
+```
+
+완벽한 중복 제거는 아닙니다 — 시크릿 모드나 localStorage를 지우면 다시 셉니다. 하지만 "새로고침마다 폭증"이라는 진짜 문제는 사라졌고, 서버에 방문자 식별 상태를 안 만들어도 되니 [무상태](/posts/scalability-stateless)로 남길 수 있었습니다. 정확도와 단순함의 실용적 절충이었죠.
+
+## 저장소가 없어도 죽지 않게
+
+로컬 개발이나 환경변수 미설정 상황에서 조회수 때문에 페이지 전체가 터지면 안 됩니다. 그래서 **우아한 저하(graceful degradation)** 를 넣었습니다.
+
+- `redis`가 `null`이면(환경변수 없음) API는 `{ views: null }`을 반환.
+- 클라이언트는 `views`가 `null`이면 **아무것도 렌더하지 않음**(숫자 자리 자체가 안 보임).
+
+```tsx
+if (views == null) return null; // 저장소 미설정·로딩 중이면 조용히 숨김
+```
+
+조회수는 "있으면 좋은" 부가 기능이지 핵심이 아니니, **없을 때 조용히 사라지는** 게 맞다고 봤습니다.
+
+## 삽질 하나 — 값이 계속 null
+
+배포하고도 한동안 조회수가 안 떴습니다. 원인은 두 가지였어요. (1) 환경변수를 추가하고 **재배포를 안 함** — 빌드 시점에 주입되니 다시 배포해야 반영됩니다. (2) 배포 플랫폼 환경변수 값에 **따옴표를 포함**해서 붙여넣음 — `.env` 문법의 `"..."` 를 값 칸에 그대로 넣으니 토큰이 깨졌죠. 값만 **날것으로** 넣어야 했습니다.
+
+## 배운 것
+
+작은 기능이지만 백엔드의 조각들이 다 들어 있었습니다.
+
+- **원자적 연산**(`INCR`)으로 동시성 안전하게 세기
+- **Route Handler**로 읽기(`GET`)/변경(`POST`) 분리, **입력 검증**으로 임의 키 차단
+- **클라이언트 상태**(localStorage)로 서버를 무상태로 유지하며 어뷰징 완화
+- **우아한 저하**로 부가 기능이 본체를 위협하지 않게
+
+---
+
+"숫자 하나 +1"이 이렇게 할 얘기가 많을 줄 몰랐습니다. 그리고 이때 Redis와 API를 처음 만져본 게 재밌어서, 결국 [본격적으로 백엔드를 파보기로](/posts/backend-first-step) 했어요. 조회수 카운터가 그 시작점이었던 셈입니다.
