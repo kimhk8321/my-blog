@@ -17,8 +17,18 @@ export default async function OgImage({
 }) {
   const { slug } = await params;
   const post = getPostBySlug(slug);
-  const title = post?.title ?? siteConfig.title;
-  const description = post?.description ?? siteConfig.description;
+  // OG 이미지(Satori)는 특수 키보드 글리프의 폰트를 동적으로 받으려다 실패한다.
+  // 이미지에 그릴 때만 텍스트로 치환한다(페이지/메타의 원문은 그대로).
+  const clean = (s: string) =>
+    s
+      .replace(/⌘/g, "Cmd")
+      .replace(/⇧/g, "Shift")
+      .replace(/⌥/g, "Opt")
+      .replace(/⌃/g, "Ctrl")
+      .replace(/⏎/g, "Enter")
+      .replace(/⎋/g, "Esc");
+  const title = clean(post?.title ?? siteConfig.title);
+  const description = clean(post?.description ?? siteConfig.description);
 
   return new ImageResponse(
     (
