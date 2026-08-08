@@ -1,12 +1,26 @@
 import { getAllPosts } from "@/lib/posts";
-import { siteConfig } from "@/lib/site";
+import { siteConfig, siteUrl } from "@/lib/site";
 import { PostList } from "@/components/post-list";
 
 export default function Home() {
   const posts = getAllPosts();
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: siteConfig.title,
+    description: siteConfig.description,
+    url: siteUrl,
+    inLanguage: "ko-KR",
+    author: { "@type": "Person", name: siteConfig.author.name },
+  };
+
   return (
     <div>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <section className="mb-12">
         <h1 className="text-3xl font-bold tracking-tight">{siteConfig.name}</h1>
         <p className="mt-3 text-foreground/70">{siteConfig.description}</p>
