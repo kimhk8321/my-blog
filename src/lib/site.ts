@@ -1,15 +1,15 @@
 export const siteConfig = {
-  name: "Frontend Dev Blog",
-  title: "프론트엔드 기술 블로그",
+  name: "김형기의 기술 블로그",
+  title: "김형기의 기술 블로그",
   description:
-    "프론트엔드 개발과 관련된 학습 기록과 경험을 정리하는 기술 블로그입니다.",
+    "프론트엔드를 중심으로 CS·개발 경험까지 정리하는 기술 블로그입니다.",
   author: {
-    name: "hyeonggi",
+    name: "김형기",
     email: "kimhk8321@gmail.com",
   },
   locale: "ko_KR",
 } as const;
 
 export const siteUrl = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://my-blog-self-alpha.vercel.app"
 ).replace(/\/$/, "");

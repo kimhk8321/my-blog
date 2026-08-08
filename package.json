@@ -13,6 +13,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.2",
     "feed": "^5.2.1",
     "gray-matter": "^4.0.3",
     "next": "16.2.9",

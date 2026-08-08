@@ -12,9 +12,11 @@ import {
 } from "@/lib/posts";
 import { formatDate } from "@/lib/format";
 import { getCategoryById } from "@/lib/categories";
+import { siteConfig, siteUrl } from "@/lib/site";
 import { TagList } from "@/components/tag-list";
 import { PostNav } from "@/components/post-nav";
 import { Comments } from "@/components/comments";
+import { ViewCounter } from "@/components/view-counter";
 import { mdxComponents } from "@/components/mdx-components";
 
 interface PageProps {
@@ -62,8 +64,29 @@ export default async function PostPage({ params }: PageProps) {
   const category = post.category ? getCategoryById(post.category) : undefined;
   const { newer, older } = getAdjacentPosts(slug);
 
+  const postUrl = `${siteUrl}/posts/${slug}`;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.description,
+    datePublished: post.date,
+    dateModified: post.date,
+    author: { "@type": "Person", name: siteConfig.author.name },
+    publisher: { "@type": "Organization", name: siteConfig.title },
+    mainEntityOfPage: { "@type": "WebPage", "@id": postUrl },
+    url: postUrl,
+    image: `${postUrl}/opengraph-image`,
+    keywords: (post.tags ?? []).join(", "),
+    inLanguage: "ko-KR",
+  };
+
   return (
     <article>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Link
         href="/"
         className="text-sm text-foreground/60 hover:text-foreground transition-colors"
@@ -85,6 +108,7 @@ export default async function PostPage({ params }: PageProps) {
               </Link>
             </>
           )}
+          <ViewCounter slug={slug} />
         </div>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{post.title}</h1>
         <p className="mt-3 text-foreground/70">{post.description}</p>
