@@ -61,6 +61,11 @@ export const categories: Category[] = [
     description: "디자인 패턴, SSR, BFF",
   },
   {
+    id: "backend",
+    label: "백엔드",
+    description: "Node.js, API 설계, 데이터베이스, 서버 사이드 기초",
+  },
+  {
     id: "infra",
     label: "인프라·배포",
     description: "CI/CD, Docker, Kubernetes",
