@@ -1,0 +1,79 @@
+---
+title: "인덱스와 N+1 문제 — 쿼리 성능의 기본"
+description: "인덱스는 왜 빠르고 언제 독이 되는가. B-tree 인덱스의 원리와 트레이드오프, 그리고 ORM에서 가장 흔한 성능 함정인 N+1 문제와 해결법을 정리합니다."
+date: "2026-08-15"
+category: "backend"
+order: 8
+tags: ["백엔드", "데이터베이스", "인덱스", "성능", "N+1"]
+---
+
+같은 데이터라도 쿼리를 어떻게 짜느냐에 따라 응답이 10ms가 되기도, 10초가 되기도 합니다. 백엔드 성능의 상당 부분이 **DB 쿼리**에서 갈리죠. 그 두 축이 **인덱스**와 **N+1 문제**입니다.
+
+## 인덱스 — 책의 색인
+
+인덱스 없이 `WHERE email = ?` 를 하면 DB는 **모든 행을 처음부터 훑습니다**(풀 스캔, O(n)). 인덱스는 책 뒤의 색인처럼, 특정 컬럼을 미리 정렬해둔 **별도 자료구조(B-tree)** 라 O(log n)으로 바로 찾아갑니다. ([CS의 인덱스](/posts/cs-database) 편의 그 B-tree죠.)
+
+```sql
+CREATE INDEX idx_users_email ON users(email);
+-- 이제 WHERE email = ? 가 전체 스캔 없이 빠르게
+```
+
+## 인덱스의 대가 — 공짜가 아니다
+
+인덱스를 무조건 많이 걸면 안 됩니다. 트레이드오프가 있어요.
+
+- **읽기는 빨라지지만 쓰기는 느려진다**: INSERT/UPDATE마다 인덱스도 갱신해야 함.
+- **공간을 더 쓴다**: 인덱스도 저장 공간을 차지.
+- **선택도(selectivity)가 낮으면 무의미**: `WHERE gender = ?` 처럼 값 종류가 적으면 인덱스가 별 도움 안 됨.
+
+즉 **자주 조회 조건·정렬에 쓰이는 컬럼**에만 겁니다. 복합 인덱스는 **조건 순서**도 중요하고요.
+
+## 실행 계획 — 추측하지 말고 본다
+
+"이 쿼리가 인덱스를 타나?"는 추측하지 말고 **`EXPLAIN`** 으로 확인합니다.
+
+```sql
+EXPLAIN SELECT * FROM users WHERE email = 'a@b.com';
+-- Seq Scan(풀 스캔)이면 인덱스 안 탐, Index Scan이면 탐
+```
+
+프론트에서 [Profiler로 리렌더를 측정](/posts/rerender-optimization)하던 것처럼, 서버에선 실행 계획으로 병목을 **측정**합니다. 감이 아니라 데이터로.
+
+## N+1 문제 — ORM의 함정
+
+가장 흔한 백엔드 성능 사고입니다. "글 목록과 각 글의 작성자"를 가져올 때:
+
+```js
+const posts = await Post.findAll();          // 1번 쿼리
+for (const post of posts) {
+  post.author = await User.findById(post.userId); // N번 쿼리!
+}
+```
+
+글이 100개면 **1 + 100 = 101번**의 쿼리가 나갑니다. 각각은 빠르지만 왕복이 쌓여 느려지죠. ORM이 관계를 자동으로 lazy 로딩할 때 조용히 발생합니다.
+
+## N+1 해결 — 한 번에 가져오기
+
+핵심은 **여러 번 대신 한 번(또는 두 번)** 으로 묶는 것.
+
+```js
+// 1) JOIN / eager loading — 한 쿼리로 함께
+const posts = await Post.findAll({ include: [User]});
+
+// 2) 배치 조회 — 필요한 id를 모아 IN 한 방
+const posts = await Post.findAll();
+const ids = posts.map((p) => p.userId);
+const users = await User.findAll({ where: { id: ids } }); // WHERE id IN (...)
+```
+
+101번이 2번으로 줄죠. GraphQL에선 **DataLoader**가 이 배칭을 자동화합니다.
+
+## 그 밖의 기본기
+
+- **필요한 컬럼만** (`SELECT *` 대신 필요한 것만) — 네트워크·메모리 절약.
+- **페이지네이션** — 목록은 잘라서. ([REST API 설계](/posts/rest-api-design)의 그 페이지네이션.)
+- **자주 쓰는 무거운 결과는 [캐시](/posts/server-caching)** — 아예 DB를 안 가게.
+
+---
+
+쿼리 성능의 두 축은 "**인덱스로 찾는 비용을 줄이고, N+1을 없애 왕복을 줄인다**"입니다. 둘 다 감이 아니라 `EXPLAIN`·쿼리 로그로 측정해서 잡는 게 핵심이에요. 다음 글에서는 아예 DB를 덜 가게 하는 [서버 캐싱 전략](/posts/server-caching)을 봅니다.
