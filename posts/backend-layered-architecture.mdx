@@ -1,0 +1,70 @@
+---
+title: "백엔드 계층 구조 — Controller·Service·Repository"
+description: "요청 처리·비즈니스 로직·데이터 접근을 왜 나누는가. 컨트롤러/서비스/리포지토리 3계층으로 관심사를 분리해 테스트 가능하고 바꾸기 쉬운 서버를 만드는 법을 정리합니다."
+date: "2026-08-15"
+category: "backend"
+order: 4
+tags: ["백엔드", "아키텍처", "계층 구조", "설계"]
+---
+
+작은 API는 라우트 핸들러 하나에 다 때려 넣어도 돕니다. 요청 파싱하고, DB 조회하고, 계산하고, 응답까지. 하지만 로직이 커지면 그 한 함수가 **수백 줄의 진흙탕**이 됩니다. 프론트에서 컴포넌트를 [관심사별로 쪼갰듯](/posts/headless-components), 백엔드도 계층으로 나눕니다.
+
+## 세 계층
+
+가장 널리 쓰는 3계층입니다.
+
+- **Controller(컨트롤러)**: HTTP를 다룬다. 요청을 파싱·검증하고, 서비스를 호출하고, 결과를 상태 코드·JSON으로 응답. **HTTP를 아는 유일한 층.**
+- **Service(서비스)**: 비즈니스 로직. "이 주문이 유효한가", "포인트를 얼마 적립하나" 같은 **규칙**. HTTP도 DB도 몰라야 한다.
+- **Repository(리포지토리)**: 데이터 접근. DB·[저장소](/posts/data-store-selection)와 대화하는 유일한 층. "어떻게 저장/조회하는가".
+
+```
+요청 → Controller → Service → Repository → DB
+       (HTTP)      (규칙)     (데이터 접근)
+```
+
+## 흐름 예시
+
+"글 작성" 하나를 계층으로 나누면:
+
+```ts
+// Controller — HTTP만
+async function createPost(req, res) {
+  const { title, content } = req.body;
+  if (!title) return res.status(400).json({ error: "제목 필수" });
+  const post = await postService.create(req.user.id, title, content);
+  res.status(201).json(post);
+}
+
+// Service — 규칙만 (HTTP·DB 모름)
+async function create(userId, title, content) {
+  if (await isSpam(content)) throw new Error("스팸 감지");
+  return postRepository.insert({ userId, title, content, createdAt: Date.now() });
+}
+
+// Repository — 데이터 접근만
+async function insert(post) {
+  return db.query("INSERT INTO posts ...", post);
+}
+```
+
+## 왜 나누나 — 세 가지 이득
+
+**① 관심사 분리.** 각 층이 한 가지만 합니다. 컨트롤러를 보면 "이 API가 뭘 받고 뭘 주는지"만, 서비스를 보면 "규칙이 뭔지"만 보입니다.
+
+**② 바꾸기 쉬움.** DB를 MySQL에서 다른 걸로 바꿔도 **Repository만** 고치면 됩니다. 서비스·컨트롤러는 그대로. HTTP 프레임워크를 바꿔도 컨트롤러만 손봅니다.
+
+**③ 테스트 용이.** 서비스는 HTTP·DB에 의존하지 않으니, 리포지토리를 가짜(mock)로 바꿔 **비즈니스 로직만 순수하게 테스트**할 수 있습니다. ([테스트](/posts/react-testing)의 "구현이 아니라 동작을" 원칙이 서버에서도.)
+
+## 의존성 방향 — 안쪽은 바깥을 모른다
+
+핵심 규칙: **의존은 한 방향으로만** 흐릅니다. Controller → Service → Repository. 반대로 Service가 Controller를(HTTP를) 알면 안 됩니다. 비즈니스 규칙이 특정 전달 방식(HTTP)에 묶이면, 나중에 그 규칙을 다른 곳(배치 작업, 큐 컨슈머)에서 재사용할 수 없거든요.
+
+이 "안쪽(핵심 로직)은 바깥(세부 기술)을 모른다"가 [클린 아키텍처](/posts/clean-code-refactoring)·[SOLID의 의존성 역전](/posts/oop-solid)이 말하는 바로 그것입니다.
+
+## 과하지 않게
+
+작은 프로젝트에 3계층 + 인터페이스 + DI 컨테이너까지 얹으면 오히려 무겁습니다. **로직이 자라는 만큼** 나누세요. 방명록처럼 단순한 건 [라우트 핸들러 하나](/posts/guestbook-backend)로도 충분하고, 규칙이 복잡해지는 순간 서비스를 분리하면 됩니다.
+
+---
+
+계층 구조의 본질은 "**각 층이 한 가지 이유로만 바뀌게**" 만드는 것입니다. HTTP가 바뀌면 컨트롤러만, 규칙이 바뀌면 서비스만, 저장 방식이 바뀌면 리포지토리만. 프론트의 컴포넌트 분리와 정확히 같은 사고예요. 다음 글에서는 그 Repository가 대화할 [데이터 저장소 선택](/posts/data-store-selection)을 다룹니다.
