@@ -1,0 +1,116 @@
+---
+title: "방명록을 만들며 배우는 백엔드 — API·저장소·검증·레이트 리밋"
+description: "단순해 보이는 방명록에 백엔드의 핵심이 다 있다. Route Handler로 API를 설계하고, Redis 리스트에 저장하고, 입력 검증·XSS 방어·레이트 리밋까지 직접 구현한 기록입니다."
+date: "2026-08-15"
+category: "backend"
+order: 2
+tags: ["백엔드", "API", "Redis", "검증", "구현"]
+---
+
+[백엔드를 시작하며](/posts/backend-first-step) 첫 프로젝트로 **방명록**을 골랐습니다. "이름과 메시지를 남기면 목록에 쌓인다" — 프론트에서 보면 폼 하나지만, 서버에서 보면 백엔드의 기본기가 전부 담겨 있습니다. 실제로 만들어 이 블로그에 붙였고, [방명록 페이지](/guestbook)에서 써볼 수 있습니다.
+
+## 1. API 설계 — 리소스와 메서드
+
+가장 먼저 "무엇을 어떤 요청으로 다룰까"를 정합니다. 방명록은 리소스가 하나(글 목록)고, 두 가지 동작이 있죠.
+
+- **목록 읽기** → `GET /api/guestbook`
+- **글 남기기** → `POST /api/guestbook`
+
+읽기는 `GET`, 생성은 `POST`. 이 구분이 REST의 출발점입니다. [Next.js Route Handler](/posts/nextjs-route-handlers)로 `route.ts` 하나에 두 함수를 export하면 끝입니다.
+
+```ts filename="app/api/guestbook/route.ts"
+export async function GET() { /* 목록 반환 */ }
+export async function POST(req: Request) { /* 검증 → 저장 */ }
+```
+
+## 2. 데이터 모델링 — 왜 리스트인가
+
+"방명록을 어떻게 저장하지?" 가 첫 백엔드 고민이었습니다. 방명록은 **시간순으로 쌓이는 목록**이니, 키-값 저장소인 Redis의 **List** 자료구조가 딱 맞습니다.
+
+- `LPUSH`로 **앞에** 새 글을 넣으면 → 최신이 항상 앞 (최신순 정렬 공짜)
+- `LRANGE key 0 49`로 **최근 50개**만 조회
+- `LTRIM key 0 99`로 **최대 100개**만 유지 (오래된 건 자동으로 밀려남)
+
+```ts
+await redis.lpush("guestbook", entry); // 최신이 맨 앞
+await redis.ltrim("guestbook", 0, 99); // 100개 초과분은 버림
+const entries = await redis.lrange("guestbook", 0, 49); // 최근 50개
+```
+
+"정렬 컬럼 + ORDER BY"가 아니라 **자료구조 선택만으로** 최신순·개수 제한이 해결됩니다. 저장소의 특성에 맞게 모델을 고르는 것 — 이게 데이터 모델링의 첫 감각이더군요.
+
+## 3. 입력 검증 — 프론트 검증과는 목적이 다르다
+
+여기서 프론트엔드와 백엔드의 결정적 차이를 배웠습니다. **프론트 검증은 UX를 위한 것이고, 서버 검증은 보안을 위한 것**입니다.
+
+프론트에서 `maxLength`를 걸어도, 누군가 `curl`로 API를 직접 때리면 그 제한은 없는 셈입니다. [서버는 클라이언트를 절대 믿으면 안 됩니다.](/posts/web-security)
+
+```ts
+const name = String(body?.name ?? "").trim();
+const message = String(body?.message ?? "").trim();
+
+if (name.length < 1 || name.length > 20)
+  return NextResponse.json({ error: "이름은 1~20자" }, { status: 400 });
+if (message.length < 1 || message.length > 200)
+  return NextResponse.json({ error: "메시지는 1~200자" }, { status: 400 });
+```
+
+- 빈 값·초과 길이를 **서버에서 다시** 막는다.
+- 실패하면 **`400 Bad Request`** 로 명확히 알린다. 상태 코드가 곧 API의 언어입니다.
+
+## 4. XSS 방어 — 저장은 날것, 출력은 이스케이프
+
+사용자가 `<script>alert(1)</script>` 를 메시지로 남기면? 이걸 그대로 HTML에 꽂으면 [XSS](/posts/web-security)입니다. 방어의 원칙은 **"입력을 왜곡하지 말고, 출력할 때 안전하게"** 입니다.
+
+다행히 React로 렌더하면 **텍스트를 자동으로 이스케이프**합니다.
+
+```tsx
+<p>{entry.message}</p>  // <script>는 문자 그대로 표시됨. 실행 안 됨.
+```
+
+`dangerouslySetInnerHTML`만 쓰지 않으면 저장된 값이 무엇이든 안전하게 **텍스트로** 그려집니다. 그래서 저장은 날것 그대로 두고, 렌더링 계층이 이스케이프를 책임지게 했습니다.
+
+## 5. 레이트 리밋 — 남용을 막는 최소 장치
+
+공개 API는 **누구나, 자동으로** 두드릴 수 있습니다. 스크립트로 초당 수백 개를 남기면 방명록이 도배되죠. 그래서 **같은 IP는 30초에 한 번**만 쓰도록 제한했습니다.
+
+Redis의 **`SET key value NX EX`** 한 줄이면 됩니다.
+
+```ts
+const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+
+// NX: 키가 없을 때만 성공 · EX 30: 30초 뒤 자동 삭제
+const ok = await redis.set(`rl:guestbook:${ip}`, "1", { nx: true, ex: 30 });
+if (ok === null) {
+  return NextResponse.json({ error: "잠시 후 다시" }, { status: 429 });
+}
+```
+
+- 첫 요청은 키가 없으니 성공하고, 30초짜리 키를 심는다.
+- 30초 안에 또 오면 키가 있어 `NX`가 실패(`null`) → **`429 Too Many Requests`**.
+- `EX`로 30초 뒤 키가 사라지면 다시 허용.
+
+"카운터 + 만료"만으로 레이트 리밋이 되는 게 신기했습니다. 프론트에서 쓰던 [디바운스·스로틀](/posts/modern-react-custom-hooks)의 서버 버전인 셈이죠.
+
+## 6. 우아한 저하 — 저장소가 없어도 죽지 않게
+
+저장소(Upstash) 환경변수가 없거나 장애가 나도 페이지 전체가 터지면 안 됩니다. Redis 클라이언트가 없으면 빈 목록을 반환하고, 저장 실패는 에러 코드로 돌려주도록 했습니다.
+
+```ts
+if (!redis) return NextResponse.json({ entries: [] }); // 조용히 비활성화
+```
+
+## 배운 것
+
+방명록 하나에 백엔드의 축소판이 다 있었습니다.
+
+| 프론트 관점 | 백엔드에서 새로 배운 것 |
+| --- | --- |
+| 폼 제출 | **API 설계**(리소스·메서드·상태 코드) |
+| 상태에 배열 저장 | **저장소 자료구조 선택**(Redis List) |
+| `maxLength` 검증 | **서버 검증**(신뢰 불가한 입력) |
+| — | **XSS는 출력에서**, **레이트 리밋**, **우아한 저하** |
+
+---
+
+"단순한 방명록"이 백엔드 입문에 이렇게 알찰 줄 몰랐습니다. API를 **호출하는** 쪽에서 **만드는** 쪽으로 자리를 옮기니, 매일 보던 상태 코드와 헤더가 완전히 다르게 읽히더군요. 직접 [남겨 보시고](/guestbook), 다음엔 인증(로그인)을 붙여볼 생각입니다.

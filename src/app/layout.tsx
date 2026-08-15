@@ -94,6 +94,12 @@ export default function RootLayout({
               >
                 태그
               </Link>
+              <Link
+                href="/guestbook"
+                className="hover:text-foreground transition-colors"
+              >
+                방명록
+              </Link>
               <ThemeToggle />
             </nav>
           </div>
