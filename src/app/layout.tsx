@@ -100,6 +100,12 @@ export default function RootLayout({
               >
                 방명록
               </Link>
+              <Link
+                href="/search"
+                className="hover:text-foreground transition-colors"
+              >
+                검색
+              </Link>
               <ThemeToggle />
             </nav>
           </div>
