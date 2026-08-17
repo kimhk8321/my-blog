@@ -13,7 +13,7 @@ export default function GuestbookPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">방명록</h1>
         <p className="mt-2 text-sm text-foreground/70">
-          블로그에 직접 만든 백엔드(방명록)입니다. 자유롭게 한마디 남겨 주세요.
+          블로그에 직접 만든 방명록입니다. 자유롭게 한마디 남겨 주세요.
           만든 과정은{" "}
           <a href="/posts/guestbook-backend" className="underline">
             이 글
