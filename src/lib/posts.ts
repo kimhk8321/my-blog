@@ -64,7 +64,8 @@ export function getPostBySlug(slug: string): Post | null {
   };
 }
 
-export function getAllPosts(): PostMeta[] {
+/** 본문까지 포함한 전체 글. 검색 색인처럼 content가 필요한 곳에서 사용. */
+export function getAllPostsWithContent(): Post[] {
   const showDrafts = process.env.NODE_ENV !== "production";
 
   const posts = getPostFileNames()
@@ -73,6 +74,10 @@ export function getAllPosts(): PostMeta[] {
     .filter((p) => showDrafts || !p.draft);
 
   return sortPosts(posts, "latest");
+}
+
+export function getAllPosts(): PostMeta[] {
+  return getAllPostsWithContent();
 }
 
 export function getAllPostSlugs(): string[] {
