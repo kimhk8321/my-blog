@@ -110,8 +110,8 @@ export default async function PostPage({ params }: PageProps) {
           )}
           <ViewCounter slug={slug} />
         </div>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">{post.title}</h1>
-        <p className="mt-3 text-foreground/70">{post.description}</p>
+        <h1 className="mt-2 break-words text-3xl font-bold tracking-tight">{post.title}</h1>
+        <p className="mt-3 break-words text-foreground/70">{post.description}</p>
         <div className="mt-4">
           <TagList tags={post.tags ?? []} />
         </div>

@@ -163,10 +163,10 @@ export function Search() {
           return (
             <li key={hit.slug}>
               <Link href={`/posts/${hit.slug}`} className="group block">
-                <h2 className="font-semibold group-hover:text-indigo-500 transition-colors">
+                <h2 className="font-semibold break-words group-hover:text-indigo-500 transition-colors">
                   <Highlight text={hit.title} terms={terms} />
                 </h2>
-                <p className="mt-1 text-sm leading-relaxed text-foreground/70">
+                <p className="mt-1 break-words text-sm leading-relaxed text-foreground/70">
                   <Highlight text={hit.snippet} terms={terms} />
                 </p>
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-foreground/40">
