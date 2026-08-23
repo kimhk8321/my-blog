@@ -14,6 +14,7 @@ import { formatDate } from "@/lib/format";
 import { getCategoryById } from "@/lib/categories";
 import { siteConfig, siteUrl } from "@/lib/site";
 import { TagList } from "@/components/tag-list";
+import { RelatedPosts } from "@/components/related-posts";
 import { PostNav } from "@/components/post-nav";
 import { Comments } from "@/components/comments";
 import { ViewCounter } from "@/components/view-counter";
@@ -140,6 +141,8 @@ export default async function PostPage({ params }: PageProps) {
       </div>
 
       <PostNav older={older} newer={newer} />
+
+      <RelatedPosts slug={slug} />
 
       <Comments />
     </article>
