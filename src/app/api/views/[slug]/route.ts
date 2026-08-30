@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { RANK_KEY, redis } from "@/lib/redis";
 import { getAllPostSlugs } from "@/lib/posts";
 
 function isValidSlug(slug: string) {
@@ -27,7 +27,10 @@ export async function POST(
   const { slug } = await params;
   if (!redis || !isValidSlug(slug)) return NextResponse.json({ views: null });
   try {
-    const views = await redis.incr(`views:${slug}`);
+    const [views] = await Promise.all([
+      redis.incr(`views:${slug}`),
+      redis.zincrby(RANK_KEY, 1, slug),
+    ]);
     return NextResponse.json({ views });
   } catch {
     return NextResponse.json({ views: null });
