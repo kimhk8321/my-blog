@@ -6,3 +6,6 @@ const url = process.env.UPSTASH_REDIS_REST_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 export const redis = url && token ? new Redis({ url, token }) : null;
+
+/** 조회수 랭킹을 담는 Sorted Set. 글마다 점수(조회수)를 들고 있어 정렬이 공짜다. */
+export const RANK_KEY = "views:rank";

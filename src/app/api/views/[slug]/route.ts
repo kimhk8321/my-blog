@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { RANK_KEY, redis } from "@/lib/redis";
 import { getAllPostSlugs } from "@/lib/posts";
 
 function isValidSlug(slug: string) {
@@ -29,7 +29,12 @@ export async function POST(
   const { slug } = await params;
   if (!redis || !isValidSlug(slug)) return NextResponse.json({ views: null });
   try {
-    const views = await redis.incr(`views:${slug}`);
+    // 글별 카운터와 랭킹용 Sorted Set을 함께 올린다.
+    // 랭킹을 매번 전체 카운터를 훑어 만들지 않아도 되도록, 쌓을 때 정렬해 둔다.
+    const [views] = await Promise.all([
+      redis.incr(`views:${slug}`),
+      redis.zincrby(RANK_KEY, 1, slug),
+    ]);
     return NextResponse.json({ views });
   } catch {
     return NextResponse.json({ views: null });

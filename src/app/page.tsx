@@ -1,6 +1,7 @@
 import { getAllPosts } from "@/lib/posts";
 import { siteConfig, siteUrl } from "@/lib/site";
 import { PostList } from "@/components/post-list";
+import { PopularPosts } from "@/components/popular-posts";
 
 export default function Home() {
   const posts = getAllPosts();
@@ -25,6 +26,8 @@ export default function Home() {
         <h1 className="text-3xl font-bold tracking-tight">{siteConfig.name}</h1>
         <p className="mt-3 text-foreground/70">{siteConfig.description}</p>
       </section>
+
+      <PopularPosts />
 
       <section>
         <h2 className="sr-only">글 목록</h2>
