@@ -15,6 +15,8 @@ import { getCategoryById } from "@/lib/categories";
 import { siteConfig, siteUrl } from "@/lib/site";
 import { TagList } from "@/components/tag-list";
 import { RelatedPosts } from "@/components/related-posts";
+import { PostToc } from "@/components/post-toc";
+import { extractToc } from "@/lib/toc";
 import { PostNav } from "@/components/post-nav";
 import { Comments } from "@/components/comments";
 import { ViewCounter } from "@/components/view-counter";
@@ -126,6 +128,8 @@ export default async function PostPage({ params }: PageProps) {
           보완했습니다.
         </aside>
       )}
+
+      <PostToc items={extractToc(post.content)} />
 
       <div className="prose prose-neutral dark:prose-invert max-w-none prose-pre:bg-[#0d1117] prose-pre:text-[#e6edf3]">
         <MDXRemote
