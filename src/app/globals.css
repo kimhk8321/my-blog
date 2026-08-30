@@ -103,3 +103,14 @@ body {
 ::view-transition-new(root) {
   animation: none;
 }
+
+/* 목차 앵커로 이동할 때 고정 헤더에 제목이 가리지 않도록 */
+.prose :is(h2, h3) {
+  scroll-margin-top: 5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
