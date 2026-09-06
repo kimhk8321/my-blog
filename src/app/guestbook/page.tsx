@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Guestbook } from "@/components/guestbook";
 
 export const metadata: Metadata = {
@@ -15,9 +16,9 @@ export default function GuestbookPage() {
         <p className="mt-2 text-sm text-foreground/70">
           블로그에 직접 만든 방명록입니다. 자유롭게 한마디 남겨 주세요.
           만든 과정은{" "}
-          <a href="/posts/guestbook-backend" className="underline">
+          <Link href="/posts/guestbook-backend" className="underline">
             이 글
-          </a>
+          </Link>
           에 정리했습니다.
         </p>
       </div>
