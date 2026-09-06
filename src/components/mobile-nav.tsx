@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "글 목록" },
@@ -15,11 +14,7 @@ const links = [
 /** 좁은 화면에서 메뉴를 접어 두는 햄버거. 넓은 화면에서는 숨기고 nav를 그대로 편다. */
 export function MobileNav() {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
   const ref = useRef<HTMLDivElement>(null);
-
-  // 페이지를 이동하면 메뉴를 닫는다.
-  useEffect(() => setOpen(false), [pathname]);
 
   useEffect(() => {
     if (!open) return;
@@ -71,6 +66,7 @@ export function MobileNav() {
             <Link
               key={link.href}
               href={link.href}
+              onClick={() => setOpen(false)} // 이동하면 메뉴를 닫는다
               className="block px-4 py-2.5 text-sm text-foreground/70 transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
             >
               {link.label}

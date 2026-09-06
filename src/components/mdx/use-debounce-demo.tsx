@@ -19,6 +19,8 @@ export function UseDebounceDemo() {
   const [callCount, setCallCount] = useState(0);
   useEffect(() => {
     if (debouncedQuery === "") return;
+    // 효과가 몇 번 도는지를 세어 보여주는 것이 이 데모의 목적이다
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCallCount((c) => c + 1);
   }, [debouncedQuery]);
 

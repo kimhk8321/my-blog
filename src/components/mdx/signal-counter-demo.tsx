@@ -1,5 +1,11 @@
 "use client";
 
+/*
+ * 시그널은 React의 렌더 모델 밖에서 값을 들고 돈다.
+ * 그 차이를 눈으로 보여주는 데모라 렌더 중 ref 접근이 의도적이다.
+ */
+/* eslint-disable react-hooks/refs */
+
 import { useEffect, useRef, useState } from "react";
 
 type Signal<T> = {
@@ -38,6 +44,8 @@ export function SignalCounterDemo() {
   const [, force] = useState(0);
 
   useEffect(() => {
+    // 하이드레이션 불일치를 피하려는 의도적인 처리
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     const sig = sigRef.current!;
     if (textRef.current) textRef.current.textContent = String(sig.get());

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 const colors = [
   "bg-red-500",
@@ -13,13 +13,13 @@ const colors = [
 
 export function ViewTransitionDemo() {
   const [order, setOrder] = useState([0, 1, 2, 3, 4, 5]);
-  const [supported, setSupported] = useState(true);
-
-  useEffect(() => {
-    setSupported(
-      typeof document !== "undefined" && "startViewTransition" in document,
-    );
-  }, []);
+  // 브라우저 지원 여부는 React 밖의 사실이라 구독할 게 없다.
+  // 서버에서는 true로 그리고(경고를 미리 띄우지 않게), 클라이언트에서 실제로 확인한다.
+  const supported = useSyncExternalStore(
+    () => () => {},
+    () => "startViewTransition" in document,
+    () => true,
+  );
 
   const shuffle = () => {
     const next = [...order].sort(() => Math.random() - 0.5);

@@ -42,7 +42,6 @@ export function CommandPaletteDemo() {
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
-  useEffect(() => setActive(0), [query]);
 
   const choose = (cmd?: string) => {
     if (cmd) setChosen(cmd);
@@ -88,7 +87,10 @@ export function CommandPaletteDemo() {
             <input
               ref={inputRef}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+            setQuery(e.target.value);
+            setActive(0); // 검색어가 바뀌면 선택을 처음으로
+          }}
               onKeyDown={onKeyDown}
               placeholder="명령 검색… (예: ㄷㅋ → 다크)"
               className="w-full border-b border-black/10 bg-transparent px-3 py-2 text-sm outline-none dark:border-white/15"

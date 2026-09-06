@@ -1,12 +1,19 @@
 "use client";
 
+/*
+ * 렌더 횟수를 세려면 렌더 중에 ref를 증가시켜야 한다 — 그게 이 데모의 목적이다.
+ */
+/* eslint-disable react-hooks/refs */
+
 import { memo, useEffect, useRef, useState } from "react";
 
 function Tracked({ label }: { label: string }) {
   const renders = useRef(0);
   renders.current++; // 이 컴포넌트가 렌더된 횟수
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []); // SSR/하이드레이션 불일치 방지
+  // SSR/하이드레이션 불일치 방지 — 서버에서는 렌더 횟수를 알 수 없다
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setMounted(true), []);
 
   return (
     <div className="rounded-md bg-foreground/[0.05] px-3 py-2">

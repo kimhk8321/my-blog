@@ -1,5 +1,12 @@
 "use client";
 
+/*
+ * 이 데모는 React가 훅 상태를 어떻게 기억하는지를 직접 구현해 보인다.
+ * slots 배열을 ref에 담아 "렌더 중에 읽고 쓰는" 것이 곧 설명하려는 내용이라,
+ * 렌더 중 ref 접근을 막는 규칙을 여기서는 끈다. 실제 코드에서는 하면 안 된다.
+ */
+/* eslint-disable react-hooks/refs */
+
 import { useReducer, useRef } from "react";
 
 type SetState<T> = (v: T | ((prev: T) => T)) => void;
