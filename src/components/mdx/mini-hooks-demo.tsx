@@ -1,5 +1,8 @@
 "use client";
 
+/* 렌더 중 ref 접근이 이 데모의 설명 대상이라 규칙을 끈다. */
+/* eslint-disable react-hooks/refs */
+
 import { useReducer, useRef } from "react";
 
 type SetState<T> = (v: T | ((prev: T) => T)) => void;

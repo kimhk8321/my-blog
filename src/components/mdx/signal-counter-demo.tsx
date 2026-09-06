@@ -1,5 +1,8 @@
 "use client";
 
+/* 렌더 중 ref 접근이 이 데모의 설명 대상이라 규칙을 끈다. */
+/* eslint-disable react-hooks/refs */
+
 import { useEffect, useRef, useState } from "react";
 
 type Signal<T> = {
@@ -38,6 +41,8 @@ export function SignalCounterDemo() {
   const [, force] = useState(0);
 
   useEffect(() => {
+    // 하이드레이션 불일치를 피하려는 의도적인 처리
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     const sig = sigRef.current!;
     if (textRef.current) textRef.current.textContent = String(sig.get());
