@@ -16,6 +16,7 @@ import { siteConfig, siteUrl } from "@/lib/site";
 import { TagList } from "@/components/tag-list";
 import { RelatedPosts } from "@/components/related-posts";
 import { PostToc } from "@/components/post-toc";
+import { SeriesNav } from "@/components/series-nav";
 import { extractToc } from "@/lib/toc";
 import { PostNav } from "@/components/post-nav";
 import { Comments } from "@/components/comments";
@@ -128,6 +129,8 @@ export default async function PostPage({ params }: PageProps) {
           보완했습니다.
         </aside>
       )}
+
+      <SeriesNav slug={slug} />
 
       <PostToc items={extractToc(post.content)} />
 

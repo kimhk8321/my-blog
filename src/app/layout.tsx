@@ -101,6 +101,12 @@ export default function RootLayout({
                   태그
                 </Link>
                 <Link
+                  href="/archive"
+                  className="hover:text-foreground transition-colors"
+                >
+                  아카이브
+                </Link>
+                <Link
                   href="/guestbook"
                   className="hover:text-foreground transition-colors"
                 >
