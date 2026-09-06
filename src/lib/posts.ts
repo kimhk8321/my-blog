@@ -16,6 +16,10 @@ export interface PostFrontmatter {
   migrated?: boolean;
   /** 같은 날짜 글의 순서(먼저 쓴 순으로 1,2,3…). 최신순에서 큰 값(최신 글)이 위로. */
   order?: number;
+  /** 연재물이면 시리즈 이름. 같은 이름끼리 한 시리즈로 묶인다. */
+  series?: string;
+  /** 시리즈 안에서 몇 번째 글인지(1부터). */
+  seriesOrder?: number;
 }
 
 export interface PostMeta extends PostFrontmatter {
@@ -60,6 +64,8 @@ export function getPostBySlug(slug: string): Post | null {
     draft: fm.draft ?? false,
     migrated: fm.migrated ?? false,
     order: fm.order,
+    series: fm.series,
+    seriesOrder: fm.seriesOrder,
     content,
   };
 }

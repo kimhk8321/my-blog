@@ -8,6 +8,7 @@ const links = [
   { href: "/", label: "글 목록" },
   { href: "/categories", label: "카테고리" },
   { href: "/tags", label: "태그" },
+  { href: "/archive", label: "아카이브" },
   { href: "/guestbook", label: "방명록" },
 ];
 
