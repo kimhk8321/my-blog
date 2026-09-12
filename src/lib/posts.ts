@@ -3,6 +3,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import { categories, type Category } from "@/lib/categories";
 import { sortPosts } from "@/lib/post-sort";
+import { collectTags, tagKey } from "@/lib/tags";
 
 const POSTS_DIR = path.join(process.cwd(), "posts");
 
@@ -119,19 +120,14 @@ export function getAllPostSlugs(): string[] {
 }
 
 export function getAllTags(): { tag: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const post of getAllPosts()) {
-    for (const tag of post.tags ?? []) {
-      counts.set(tag, (counts.get(tag) ?? 0) + 1);
-    }
-  }
-  return [...counts.entries()]
-    .map(([tag, count]) => ({ tag, count }))
-    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "ko"));
+  return collectTags(getAllPosts().map((post) => post.tags));
 }
 
 export function getPostsByTag(tag: string): PostMeta[] {
-  return getAllPosts().filter((post) => (post.tags ?? []).includes(tag));
+  const key = tagKey(tag);
+  return getAllPosts().filter((post) =>
+    (post.tags ?? []).some((t) => tagKey(t) === key),
+  );
 }
 
 export function getAdjacentPosts(slug: string): {
