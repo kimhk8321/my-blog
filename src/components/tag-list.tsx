@@ -8,7 +8,7 @@ export function TagList({ tags }: { tags: string[] }) {
         <li key={tag}>
           <Link
             href={`/tags/${encodeURIComponent(tag)}`}
-            className="block rounded-full border border-black/10 px-3 py-0.5 text-xs text-foreground/60 transition-colors hover:border-foreground/30 hover:text-foreground dark:border-white/15"
+            className="tag-chip-xs"
           >
             #{tag}
           </Link>
