@@ -70,8 +70,7 @@ export function getPostBySlug(slug: string): Post | null {
   };
 }
 
-/** 본문까지 포함한 전체 글. 검색 색인처럼 content가 필요한 곳에서 사용. */
-export function getAllPostsWithContent(): Post[] {
+function readAllPosts(): Post[] {
   const showDrafts = process.env.NODE_ENV !== "production";
 
   const posts = getPostFileNames()
@@ -82,8 +81,37 @@ export function getAllPostsWithContent(): Post[] {
   return sortPosts(posts, "latest");
 }
 
+let cachedPosts: Post[] | null = null;
+let cachedMeta: PostMeta[] | null = null;
+
+/** 본문까지 포함한 전체 글. 검색 색인처럼 content가 필요한 곳에서 사용. */
+export function getAllPostsWithContent(): Post[] {
+  if (process.env.NODE_ENV !== "production") return readAllPosts();
+  return (cachedPosts ??= readAllPosts());
+}
+
+/** 본문을 떼고 메타데이터만 남긴다. */
+function toMeta(post: Post): PostMeta {
+  return {
+    slug: post.slug,
+    title: post.title,
+    description: post.description,
+    date: post.date,
+    category: post.category,
+    tags: post.tags,
+    draft: post.draft,
+    migrated: post.migrated,
+    order: post.order,
+    series: post.series,
+    seriesOrder: post.seriesOrder,
+  };
+}
+
 export function getAllPosts(): PostMeta[] {
-  return getAllPostsWithContent();
+  if (process.env.NODE_ENV !== "production") {
+    return getAllPostsWithContent().map(toMeta);
+  }
+  return (cachedMeta ??= getAllPostsWithContent().map(toMeta));
 }
 
 export function getAllPostSlugs(): string[] {

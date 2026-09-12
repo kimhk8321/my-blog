@@ -58,7 +58,7 @@ export function search(query: string, limit = 20): SearchHit[] {
   const tokens = [...new Set(tokenize(query, "query"))];
   if (tokens.length === 0) return [];
 
-  // 토큰별로 후보 글과 점수를 모은다. 여기서 128편 전체를 훑지 않는 게 핵심.
+  // 토큰별로 후보 글과 점수를 모은다. 여기서 글 전체를 훑지 않는 게 핵심.
   //
   // 점수를 둘로 나눠 쌓는다.
   //  - topicalScore: 제목·태그에 맞았나 → "이 글이 그 주제인가"

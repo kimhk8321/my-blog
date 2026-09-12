@@ -25,6 +25,22 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/* 태그 칩 */
+@layer components {
+  .tag-chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-black/10 text-foreground/70 transition-colors hover:border-foreground/30 hover:text-foreground dark:border-white/15;
+  }
+  .tag-chip-md {
+    @apply px-4 py-1.5 text-sm;
+  }
+  .tag-chip-sm {
+    @apply px-3 py-1 text-xs;
+  }
+  .tag-chip-xs {
+    @apply block rounded-full border border-black/10 px-3 py-0.5 text-xs text-foreground/60 transition-colors hover:border-foreground/30 hover:text-foreground dark:border-white/15;
+  }
+}
+
 .hljs {
   display: block;
   overflow-x: auto;
