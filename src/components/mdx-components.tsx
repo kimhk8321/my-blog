@@ -36,6 +36,8 @@ import { TreeViewDemo } from "@/components/mdx/tree-view-demo";
 import { LiveRegionToastDemo } from "@/components/mdx/live-region-toast-demo";
 import { RegexTesterDemo } from "@/components/mdx/regex-tester-demo";
 import { ComboboxDemo } from "@/components/mdx/combobox-demo";
+import { IdempotencyDemo } from "@/components/mdx/idempotency-demo";
+import { OptimisticConcurrencyDemo } from "@/components/mdx/optimistic-concurrency-demo";
 
 type MdxComponent = ComponentType<Record<string, unknown>>;
 
@@ -78,4 +80,6 @@ export const mdxComponents: Record<string, MdxComponent> = {
   LiveRegionToastDemo: LiveRegionToastDemo as MdxComponent,
   RegexTesterDemo: RegexTesterDemo as MdxComponent,
   ComboboxDemo: ComboboxDemo as MdxComponent,
+  IdempotencyDemo: IdempotencyDemo as MdxComponent,
+  OptimisticConcurrencyDemo: OptimisticConcurrencyDemo as MdxComponent,
 };
