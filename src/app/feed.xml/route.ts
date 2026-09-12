@@ -4,6 +4,9 @@ import { siteConfig, siteUrl } from "@/lib/site";
 
 export const dynamic = "force-static";
 
+/** 피드에 담을 글 수. */
+const FEED_LIMIT = 20;
+
 export function GET() {
   const feed = new Feed({
     title: siteConfig.title,
@@ -22,7 +25,7 @@ export function GET() {
     },
   });
 
-  for (const post of getAllPosts()) {
+  for (const post of getAllPosts().slice(0, FEED_LIMIT)) {
     const url = `${siteUrl}/posts/${post.slug}`;
     feed.addItem({
       title: post.title,

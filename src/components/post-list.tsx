@@ -1,39 +1,67 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { formatDate } from "@/lib/format";
 import type { PostMeta } from "@/lib/posts";
 import { TagList } from "@/components/tag-list";
 import { getCategoryById } from "@/lib/categories";
 import { sortPosts, SORT_OPTIONS, type SortMode } from "@/lib/post-sort";
+import { paginate } from "@/lib/paginate";
+import { Pagination } from "@/components/pagination";
+
+/** 한 화면에 보여 줄 글 수. */
+const PER_PAGE = 20;
 
 export function PostList({ posts }: { posts: PostMeta[] }) {
   const [sort, setSort] = useState<SortMode>("latest");
-  const sorted = sortPosts(posts, sort);
+  const [page, setPage] = useState(1);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  const sorted = useMemo(() => sortPosts(posts, sort), [posts, sort]);
+  const { items, page: current, totalPages, total } = paginate(sorted, page, PER_PAGE);
+
+  function goTo(next: number) {
+    setPage(next);
+    topRef.current?.scrollIntoView({ block: "start" });
+  }
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-end gap-2 text-sm">
-        <label htmlFor="post-sort" className="text-foreground/50">
-          정렬
-        </label>
-        <select
-          id="post-sort"
-          value={sort}
-          onChange={(e) => setSort(e.target.value as SortMode)}
-          className="rounded-md border border-black/10 bg-background px-2 py-1 text-foreground/80 transition-colors hover:border-foreground/30 dark:border-white/15"
-        >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+      <div ref={topRef} className="mb-6 flex items-center justify-between gap-2 text-sm">
+        <p className="text-foreground/50">
+          {total}편
+          {totalPages > 1 && (
+            <span className="ml-2 text-foreground/40">
+              ({current}/{totalPages} 쪽)
+            </span>
+          )}
+        </p>
+
+        <div className="flex items-center gap-2">
+          <label htmlFor="post-sort" className="text-foreground/50">
+            정렬
+          </label>
+          <select
+            id="post-sort"
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as SortMode);
+              setPage(1);
+            }}
+            className="rounded-md border border-black/10 bg-background px-2 py-1 text-foreground/80 transition-colors hover:border-foreground/30 dark:border-white/15"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <ul className="flex flex-col gap-8">
-        {sorted.map((post) => {
+        {items.map((post) => {
           const category = post.category
             ? getCategoryById(post.category)
             : undefined;
@@ -73,6 +101,8 @@ export function PostList({ posts }: { posts: PostMeta[] }) {
           );
         })}
       </ul>
+
+      <Pagination page={current} totalPages={totalPages} onChange={goTo} />
     </div>
   );
 }
