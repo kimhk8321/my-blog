@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAllTags, getPostsByTag } from "@/lib/posts";
+import { canonicalTag } from "@/lib/tags";
 import { PostList } from "@/components/post-list";
 
 interface PageProps {
@@ -16,17 +17,17 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const { tag } = await params;
-  const decoded = decodeURIComponent(tag);
+  const canonical = canonicalTag(decodeURIComponent(tag));
   return {
-    title: `#${decoded}`,
-    description: `'${decoded}' 태그가 달린 글 목록입니다.`,
-    alternates: { canonical: `/tags/${tag}` },
+    title: `#${canonical}`,
+    description: `'${canonical}' 태그가 달린 글 목록입니다.`,
+    alternates: { canonical: `/tags/${encodeURIComponent(canonical)}` },
   };
 }
 
 export default async function TagPage({ params }: PageProps) {
   const { tag } = await params;
-  const decoded = decodeURIComponent(tag);
+  const decoded = canonicalTag(decodeURIComponent(tag));
   const posts = getPostsByTag(decoded);
   if (posts.length === 0) notFound();
 
