@@ -65,7 +65,11 @@ export function OptimisticConcurrencyDemo() {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {editors.map((editor, index) => (
-          <section key={index} className="rounded-md border border-black/10 p-3 dark:border-white/15">
+          <section
+            key={index}
+            aria-label={`편집기 ${index === 0 ? "A" : "B"}`}
+            className="rounded-md border border-black/10 p-3 dark:border-white/15"
+          >
             <div className="mb-2 font-medium">편집기 {index === 0 ? "A" : "B"} · v{editor.version}</div>
             <input value={editor.text} onChange={(event) => change(index, event.target.value)} className="w-full rounded-md border border-black/15 bg-transparent px-2.5 py-1.5 outline-none focus:border-blue-500 dark:border-white/20" />
             <div className="mt-2 flex gap-2">
