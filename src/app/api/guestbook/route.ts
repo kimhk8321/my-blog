@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
 import { redis } from "@/lib/redis";
 import { isAdmin } from "@/lib/admin";
+import {
+  createGuestbookEntry,
+  isValidIdempotencyKey,
+  type GuestbookEntry,
+} from "@/lib/guestbook-idempotency";
 
 const KEY = "guestbook";
-const MAX_ENTRIES = 100; // 보관 최대 개수
 const PAGE = 50; // 한 번에 내려줄 개수
-const RATE_SECONDS = 30; // IP당 작성 간격
-
-export type GuestbookEntry = {
-  id: string;
-  name: string;
-  message: string;
-  at: number;
-};
+export type { GuestbookEntry } from "@/lib/guestbook-idempotency";
 
 export async function GET() {
   if (!redis) return NextResponse.json({ entries: [] });
@@ -45,23 +42,12 @@ export async function POST(req: Request) {
   if (message.length < 1 || message.length > 200)
     return NextResponse.json({ error: "메시지는 1~200자여야 합니다" }, { status: 400 });
 
-  // 레이트 리밋: 같은 IP는 30초에 한 번만 (SET NX EX)
+  const key = req.headers.get("Idempotency-Key");
+  if (!isValidIdempotencyKey(key))
+    return NextResponse.json({ error: "유효한 Idempotency-Key가 필요합니다" }, { status: 400 });
+
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  try {
-    const ok = await redis.set(`rl:guestbook:${ip}`, "1", {
-      nx: true,
-      ex: RATE_SECONDS,
-    });
-    if (ok === null)
-      return NextResponse.json(
-        { error: "너무 자주 남기고 있어요. 잠시 후 다시 시도해 주세요" },
-        { status: 429 },
-      );
-  } catch {
-    // 레이트 리밋 실패는 작성 자체를 막지 않는다
-  }
-
   const entry: GuestbookEntry = {
     id: crypto.randomUUID(),
     name,
@@ -70,9 +56,23 @@ export async function POST(req: Request) {
   };
 
   try {
-    await redis.lpush(KEY, entry); // 최신이 앞
-    await redis.ltrim(KEY, 0, MAX_ENTRIES - 1); // 오래된 것부터 버림
-    return NextResponse.json({ entry }, { status: 201 });
+    const result = await createGuestbookEntry(redis, { key, ip, name, message }, entry);
+
+    if (result.status === "conflict")
+      return NextResponse.json(
+        { error: "같은 작성 키로 다른 내용을 보낼 수 없습니다" },
+        { status: 409 },
+      );
+    if (result.status === "rate_limited")
+      return NextResponse.json(
+        { error: "너무 자주 남기고 있어요. 잠시 후 다시 시도해 주세요" },
+        { status: 429 },
+      );
+
+    return NextResponse.json(
+      { entry: result.entry },
+      { status: result.status === "created" ? 201 : 200 },
+    );
   } catch {
     return NextResponse.json({ error: "저장에 실패했습니다" }, { status: 500 });
   }

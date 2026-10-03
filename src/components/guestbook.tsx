@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Entry = { id: string; name: string; message: string; at: number };
 
@@ -21,6 +21,8 @@ export function Guestbook() {
   const [status, setStatus] = useState<"idle" | "sending" | "error">("idle");
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const pending = useRef<{ key: string; name: string; message: string } | null>(null);
+  const sending = useRef(false);
 
   useEffect(() => {
     fetch("/api/guestbook")
@@ -32,14 +34,31 @@ export function Guestbook() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (status === "sending") return;
+    if (sending.current) return;
+    sending.current = true;
     setStatus("sending");
     setError("");
+    const normalizedName = name.trim();
+    const normalizedMessage = message.trim();
+    if (
+      pending.current?.name !== normalizedName ||
+      pending.current?.message !== normalizedMessage
+    ) {
+      pending.current = {
+        key: crypto.randomUUID(),
+        name: normalizedName,
+        message: normalizedMessage,
+      };
+    }
+
     try {
       const res = await fetch("/api/guestbook", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, message }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": pending.current.key,
+        },
+        body: JSON.stringify({ name: normalizedName, message: normalizedMessage }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -47,13 +66,20 @@ export function Guestbook() {
         setStatus("error");
         return;
       }
-      setEntries((prev) => [data.entry, ...prev]); // 낙관적 반영
+      setEntries((prev) =>
+        prev.some((entry) => entry.id === data.entry.id)
+          ? prev
+          : [data.entry, ...prev],
+      );
+      pending.current = null;
       setName("");
       setMessage("");
       setStatus("idle");
     } catch {
       setError("네트워크 오류");
       setStatus("error");
+    } finally {
+      sending.current = false;
     }
   };
 

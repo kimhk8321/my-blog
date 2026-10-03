@@ -47,3 +47,36 @@ test("낙관적 동시성 제어가 오래된 편집기를 거절한다", async 
   await expect(editorB).toContainText("409 충돌");
   await expect(page.getByText(/서버 문서/)).toContainText("A가 저장한 문서");
 });
+
+test("방명록 전송 실패 후 같은 작성 키로 재시도한다", async ({ page }) => {
+  const keys: string[] = [];
+  let attempts = 0;
+  const entry = { id: "test-entry", name: "테스트", message: "재시도 확인", at: Date.now() };
+
+  await page.route("**/api/guestbook", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: { entries: [] } });
+      return;
+    }
+
+    attempts += 1;
+    keys.push(route.request().headers()["idempotency-key"]);
+    await route.fulfill(
+      attempts === 1
+        ? { status: 500, json: { error: "응답을 받지 못했습니다" } }
+        : { status: 200, json: { entry } },
+    );
+  });
+
+  await page.goto("/guestbook");
+  await page.getByPlaceholder("이름").fill("테스트");
+  await page.getByPlaceholder("한마디 남겨 주세요 (최대 200자)").fill("재시도 확인");
+  await page.getByRole("button", { name: "남기기" }).click();
+  await expect(page.getByText("응답을 받지 못했습니다")).toBeVisible();
+  await page.getByRole("button", { name: "남기기" }).click();
+
+  await expect(page.getByText("재시도 확인")).toBeVisible();
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i);
+  expect(keys[1]).toBe(keys[0]);
+});
