@@ -1,0 +1,136 @@
+---
+title: "유형별 알고리즘 복습 (3) — 투 포인터·슬라이딩 윈도우"
+description: "고정 길이 최대합과 최소 길이 부분 배열을 JavaScript로 구현하고, 음수가 섞이면 윈도우 논리가 깨지는 이유를 반례로 확인합니다."
+date: "2026-10-08"
+category: "algorithm"
+series: "유형별 알고리즘 복습"
+seriesOrder: 3
+order: 3
+tags: ["알고리즘", "JavaScript", "투포인터", "슬라이딩윈도우", "누적합", "데모"]
+---
+
+“연속된 원소”라는 말이 보이면 구간을 떠올립니다. 그렇다고 구간 문제를 전부 투 포인터로 풀 수 있는 건 아닙니다. 이번 편에서는 **경계를 한 방향으로만 움직여도 되는 이유**를 확인하면서 코드를 쓰겠습니다.
+
+## 길이가 고정이면 빠지는 값과 들어오는 값만
+
+길이가 k인 연속 구간 중 합이 가장 큰 값을 구합니다. 숫자는 음수여도 됩니다. 가능한 구간이 없으면 `null`을 반환합니다.
+
+모든 구간을 `slice()`하고 다시 더하면 O(nk)입니다. 옆 구간으로 한 칸 움직일 때 바뀌는 건 두 원소뿐입니다.
+
+```js
+function maxWindowSum(nums, k) {
+  if (!Number.isInteger(k) || k < 1 || k > nums.length) return null;
+  let sum = 0;
+  for (let i = 0; i < k; i++) sum += nums[i];
+  let best = sum;
+
+  for (let right = k; right < nums.length; right++) {
+    sum += nums[right] - nums[right - k];
+    best = Math.max(best, sum);
+  }
+  return best;
+}
+
+console.log(maxWindowSum([2, 1, 5, 1, 3, 2], 3));
+console.log(maxWindowSum([-5, -2, -8], 2));
+```
+
+각각 `9`, `-7`입니다. 최대값을 `0`으로 시작하면 모든 구간합이 음수인 경우 틀립니다. 첫 유효 구간으로 초기화하면 이런 가정을 넣지 않아도 됩니다. 시간 O(n), 추가 공간 O(1)입니다.
+
+<Demo title="고정 길이 윈도우를 한 칸씩 이동하기">
+  <SlidingWindowDemo />
+</Demo>
+
+파란 칸이 현재 구간입니다. 데모는 계산된 구간합을 단계별로 보여 주는 방식이며, 위 풀이가 실행할 때 모든 구간을 저장한다는 뜻은 아닙니다.
+
+## 양끝 투 포인터는 정렬 순서를 이용한다
+
+오름차순 배열에서 서로 다른 두 원소의 합이 target인 인덱스 쌍을 하나 찾습니다. 첫 편의 해시 풀이와 달리 이미 정렬된 입력을 전제로 합니다.
+
+```js
+function twoSumSorted(nums, target) {
+  let left = 0;
+  let right = nums.length - 1;
+  while (left < right) {
+    const sum = nums[left] + nums[right];
+    if (sum === target) return [left, right];
+    if (sum < target) left++;
+    else right--;
+  }
+  return null;
+}
+
+console.log(twoSumSorted([-3, 0, 2, 4, 7], 4));
+```
+
+합이 작으면 left의 값은 현재 right 이하의 어떤 값과 묶어도 답이 안 됩니다. 그래서 left를 버려도 안전합니다. 합이 크면 right에 대해서 반대 이유가 성립합니다. 두 경계가 만나면 같은 위치를 두 번 쓰게 되므로 종료합니다. 시간 O(n), 추가 공간 O(1)이고 음수도 허용합니다.
+
+처음에 정렬이 필요하면 그 비용과 인덱스 변화도 고려합니다. 원래 배열의 인덱스를 답으로 요구하면 값과 원래 위치를 함께 보관하거나 해시 풀이를 사용해야 합니다.
+
+## 길이가 달라지면: 합이 충분한 동안 줄인다
+
+**양의 정수 배열**에서 합이 target 이상인 연속 구간의 최소 길이를 구합니다. target은 양수이며 없으면 0입니다.
+
+```js
+function minSubarrayLength(nums, target) {
+  let left = 0;
+  let sum = 0;
+  let best = Infinity;
+
+  for (let right = 0; right < nums.length; right++) {
+    sum += nums[right];
+    while (sum >= target) {
+      best = Math.min(best, right - left + 1);
+      sum -= nums[left++];
+    }
+  }
+  return best === Infinity ? 0 : best;
+}
+
+console.log(minSubarrayLength([2, 3, 1, 2, 4, 3], 7));
+```
+
+답은 `[4, 3]`의 길이 `2`입니다. 오른쪽을 늘리면 합이 커지고, 왼쪽을 줄이면 합이 작아집니다. 이 성질 덕분에 합이 부족한 상태에서는 왼쪽을 더 줄여 볼 필요가 없습니다.
+
+두 경계가 각각 최대 n번 움직여 시간 O(n), 추가 공간 O(1)입니다. `while`을 `if`로 바꾸면 한 번에 여러 원소를 제거해야 찾을 수 있는 짧은 답을 놓칩니다.
+
+## 음수 하나가 논리를 깨뜨린다
+
+`[1, -1, 5]`, target 5를 위 함수에 넣으면 3을 반환합니다. 실제 답은 마지막 `[5]`의 길이 1입니다. 왼쪽의 1을 뺐을 때 합이 4가 되어 축소를 멈추지만, 그 다음 -1까지 빼면 다시 합이 5가 됩니다.
+
+즉 “한 번 부족해지면 더 줄여도 부족하다”가 거짓이 됐습니다. 음수가 있는 최소 길이 문제에는 누적합과 단조 덱 같은 다른 풀이가 필요합니다. 조건을 확인하지 않고 윈도우 템플릿을 붙이면 이 지점에서 틀립니다.
+
+## 합이 정확히 target인 구간 수는 누적합 + 해시
+
+음수를 허용하면서 합이 정확히 target인 구간의 개수를 세는 문제라면 다른 방법이 있습니다. 현재 누적합이 `prefix`일 때, 과거 누적합 중 `prefix - target`인 것이 몇 번 있었는지 셉니다.
+
+```js
+function countTargetSubarrays(nums, target) {
+  const counts = new Map([[0, 1]]);
+  let prefix = 0;
+  let answer = 0;
+
+  for (const value of nums) {
+    prefix += value;
+    answer += counts.get(prefix - target) ?? 0;
+    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  }
+  return answer;
+}
+
+console.log(countTargetSubarrays([1, -1, 1], 1));
+console.log(countTargetSubarrays([0, 0], 0));
+```
+
+답은 각각 3입니다. `[0, 1]` 초기 항목은 배열 시작 전의 빈 prefix를 나타냅니다. 이것이 있어야 인덱스 0부터 시작하는 구간도 셉니다. 조회를 먼저 하고 현재 prefix를 나중에 등록해야 길이 0인 구간을 세지 않습니다.
+
+일반적인 해시 연산을 평균 O(1)로 가정하면 시간 O(n), 공간 O(n)입니다. 앞의 최소 길이 문제와는 **구하는 대상이 다르다**는 것도 구분해야 합니다.
+
+| 문제 조건 | 먼저 검토할 방법 |
+| --- | --- |
+| 고정 길이 구간의 합 | 빠지는 값·들어오는 값 갱신 |
+| 양수 배열의 최소 길이·합 조건 | 가변 윈도우 |
+| 정렬된 배열에서 두 수의 합 | 양끝 투 포인터 |
+| 음수 포함, 정확한 합의 구간 수 | 누적합 + 빈도표 |
+
+정렬해서 투 포인터를 쓸 때는 원래의 연속성이 사라집니다. 연속 구간 문제를 풀면서 배열을 정렬해도 되는지부터 확인해야 합니다. 다음 [이분 탐색 편](/posts/algorithm-04-binary-search)도 성립 조건을 먼저 세우는 방식으로 접근하겠습니다.

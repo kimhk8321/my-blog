@@ -38,6 +38,7 @@ import { RegexTesterDemo } from "@/components/mdx/regex-tester-demo";
 import { ComboboxDemo } from "@/components/mdx/combobox-demo";
 import { IdempotencyDemo } from "@/components/mdx/idempotency-demo";
 import { OptimisticConcurrencyDemo } from "@/components/mdx/optimistic-concurrency-demo";
+import { SlidingWindowDemo, BinarySearchDemo, BfsGridDemo } from "@/components/mdx/algorithm-demos";
 
 type MdxComponent = ComponentType<Record<string, unknown>>;
 
@@ -82,4 +83,7 @@ export const mdxComponents: Record<string, MdxComponent> = {
   ComboboxDemo: ComboboxDemo as MdxComponent,
   IdempotencyDemo: IdempotencyDemo as MdxComponent,
   OptimisticConcurrencyDemo: OptimisticConcurrencyDemo as MdxComponent,
+  SlidingWindowDemo: SlidingWindowDemo as MdxComponent,
+  BinarySearchDemo: BinarySearchDemo as MdxComponent,
+  BfsGridDemo: BfsGridDemo as MdxComponent,
 };
