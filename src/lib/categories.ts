@@ -81,6 +81,11 @@ export const categories: Category[] = [
     description: "React Native 앱 개발 기록",
   },
   {
+    id: "algorithm",
+    label: "알고리즘",
+    description: "JavaScript로 복습하는 자료구조와 유형별 문제 풀이",
+  },
+  {
     id: "cs",
     label: "CS",
     description: "컴퓨터 과학, 알고리즘, 웹 서버 아키텍처",

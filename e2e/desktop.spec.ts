@@ -1,5 +1,32 @@
 import { expect, test } from "@playwright/test";
 
+test("알고리즘 시리즈 목차와 단계별 데모가 동작한다", async ({ page }) => {
+  await page.goto("/posts/algorithm-03-two-pointers");
+  const series = page.getByRole("navigation", { name: "시리즈 목차" });
+  await expect(series).toContainText("유형별 알고리즘 복습");
+  await expect(series.getByRole("link")).toHaveCount(9);
+  for (let step = 0; step < 3; step++) await page.getByRole("button", { name: "다음 단계" }).click();
+  await expect(page.getByRole("status")).toContainText("지금까지 최대 9");
+  await expect(page.getByRole("button", { name: "다음 단계" })).toBeDisabled();
+
+  await page.goto("/posts/algorithm-04-binary-search");
+  await page.getByLabel("target", { exact: true }).selectOption("10");
+  for (let step = 0; step < 10; step++) {
+    const next = page.getByRole("button", { name: "다음 단계" });
+    if (await next.isDisabled()) break;
+    await next.click();
+  }
+  await expect(page.getByRole("status")).toContainText("lower bound 인덱스 9");
+
+  await page.goto("/posts/algorithm-05-dfs-bfs");
+  for (let step = 0; step < 25; step++) {
+    const next = page.getByRole("button", { name: "다음 단계" });
+    if (await next.isDisabled()) break;
+    await next.click();
+  }
+  await expect(page.getByRole("status")).toContainText("최소 이동 7회");
+});
+
 test("검색어와 가장 관련 있는 글을 찾는다", async ({ page }) => {
   await page.goto("/search");
 
