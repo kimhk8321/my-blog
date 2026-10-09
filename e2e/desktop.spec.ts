@@ -1,5 +1,31 @@
 import { expect, test } from "@playwright/test";
 
+test("알고리즘 응용 다섯 편의 본문과 시리즈를 표시한다", async ({ page }) => {
+  const slugs = ["01-prefix-sum", "02-monotonic-stack", "03-parametric-search", "04-dijkstra", "05-union-find"];
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  for (let i = 0; i < slugs.length; i++) {
+    const response = await page.goto(`/posts/algorithm-advanced-${slugs[i]}`);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(`알고리즘 응용 (${i + 1})`);
+    await expect(page.getByRole("navigation", { name: "시리즈 목차" }).getByRole("link")).toHaveCount(4);
+  }
+  expect(errors).toEqual([]);
+});
+
+test("응용 데모는 누적합 등록 순서를 보여 준다", async ({ page }) => {
+  await page.goto("/posts/algorithm-advanced-01-prefix-sum");
+  for (let i = 0; i < 24; i++) await page.getByRole("button", { name: "다음 단계" }).click();
+  await expect(page.getByRole("status")).toContainText("누적 답 4");
+  await expect(page.getByLabel("현재 counts")).toContainText("0: 2");
+  await expect(page.getByRole("button", { name: "다음 단계" })).toBeDisabled();
+  await page.getByLabel("target", { exact: true }).selectOption("-3");
+  await expect(page.getByRole("status")).toContainText("누적 답 0");
+  for (let i = 0; i < 24; i++) await page.getByRole("button", { name: "다음 단계" }).click();
+  await expect(page.getByRole("status")).toContainText("조회 key 7");
+  await expect(page.getByRole("status")).toContainText("누적 답 4");
+});
+
 test("알고리즘 시리즈 목차와 단계별 데모가 동작한다", async ({ page }) => {
   await page.goto("/posts/algorithm-03-two-pointers");
   const series = page.getByRole("navigation", { name: "시리즈 목차" });
@@ -10,13 +36,19 @@ test("알고리즘 시리즈 목차와 단계별 데모가 동작한다", async 
   await expect(page.getByRole("button", { name: "다음 단계" })).toBeDisabled();
 
   await page.goto("/posts/algorithm-04-binary-search");
+  for (let step = 0; step < 10; step++) {
+    const next = page.getByRole("button", { name: "다음 단계" });
+    if (await next.isDisabled()) break;
+    await next.click();
+  }
+  await expect(page.getByRole("status")).toContainText("인덱스 1에서 2 찾음");
   await page.getByLabel("target", { exact: true }).selectOption("10");
   for (let step = 0; step < 10; step++) {
     const next = page.getByRole("button", { name: "다음 단계" });
     if (await next.isDisabled()) break;
     await next.click();
   }
-  await expect(page.getByRole("status")).toContainText("lower bound 인덱스 9");
+  await expect(page.getByRole("status")).toContainText("target 10 없음 · 결과 -1");
 
   await page.goto("/posts/algorithm-05-dfs-bfs");
   for (let step = 0; step < 25; step++) {

@@ -39,6 +39,7 @@ import { ComboboxDemo } from "@/components/mdx/combobox-demo";
 import { IdempotencyDemo } from "@/components/mdx/idempotency-demo";
 import { OptimisticConcurrencyDemo } from "@/components/mdx/optimistic-concurrency-demo";
 import { SlidingWindowDemo, BinarySearchDemo, BfsGridDemo } from "@/components/mdx/algorithm-demos";
+import { PrefixCountsDemo } from "@/components/mdx/advanced-algorithm-demos";
 
 type MdxComponent = ComponentType<Record<string, unknown>>;
 
@@ -86,4 +87,5 @@ export const mdxComponents: Record<string, MdxComponent> = {
   SlidingWindowDemo: SlidingWindowDemo as MdxComponent,
   BinarySearchDemo: BinarySearchDemo as MdxComponent,
   BfsGridDemo: BfsGridDemo as MdxComponent,
+  PrefixCountsDemo: PrefixCountsDemo as MdxComponent,
 };

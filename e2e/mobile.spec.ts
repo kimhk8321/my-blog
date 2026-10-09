@@ -1,5 +1,14 @@
 import { expect, test } from "@playwright/test";
 
+test("모바일에서 응용 데모의 counts를 읽을 수 있다", async ({ page }, testInfo) => {
+  await page.goto("/posts/algorithm-advanced-01-prefix-sum");
+  const status = page.getByRole("status");
+  await status.scrollIntoViewIfNeeded();
+  await expect(status).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath("01-prefix-sum-mobile.png") });
+});
+
 test("모바일에서 알고리즘 데모와 시리즈 목차가 화면 안에 들어온다", async ({ page }, testInfo) => {
   await page.goto("/posts/algorithm-04-binary-search");
   await page.getByRole("button", { name: "다음 단계" }).click();

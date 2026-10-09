@@ -19,8 +19,8 @@ function code(slug: string) {
   return [...readPost(slug).content.matchAll(/```js\r?\n([\s\S]*?)```/g)].map((match) => match[1]).join("\n");
 }
 
-function verify(index: number, checks: string, prelude = "") {
-  vm.runInNewContext(`${prelude}\n${code(slugs[index - 1])}\n${checks}`, {
+function verify(index: number, checks: string) {
+  vm.runInNewContext(`${code(slugs[index - 1])}\n${checks}`, {
     console: { log() {} },
     equal(actual: unknown, expected: unknown) {
       expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
@@ -46,225 +46,212 @@ describe("algorithm article JavaScript examples", () => {
     });
   });
 
-  it("hash lookup agrees with pair enumeration and preserves multiplicities", () => {
+  it("counts names and distinguishes repeated participants", () => {
     verify(1, `
-      for (const nums of [[], [3], [3,3], [0,-2,2,0], [1,5,1,-3]]) {
-        for (let target = -5; target <= 8; target++) {
-          const actual = twoSum(nums, target);
-          const baseline = twoSumSlow(nums, target);
-          equal(actual === null, baseline === null);
-          if (actual) {
-            ok(actual[0] !== actual[1]);
-            equal(nums[actual[0]] + nums[actual[1]], target);
-          }
+      equal([...countNames(["kim","lee","kim"])], [["kim",2],["lee",1]]);
+      equal([...countNames([])], []);
+      for (const participants of [["kim"],["kim","lee","kim"],["a","a","a","b"]]) {
+        for (let missing=0;missing<participants.length;missing++) {
+          const completed=participants.filter((_,i)=>i!==missing).reverse();
+          equal(findNonCompleter(participants,completed),participants[missing]);
         }
       }
-      equal(sameCounts([1,1,2], [1,2,2]), false);
-      equal(sameCounts([], []), true);
-      equal(sameCounts([0,-1,0], [0,0,-1]), true);
+      equal(unique.size,3);
+      equal([...unique],[1,2,3]);
     `);
   });
 
-  it("stack and queue handle empty, repeated, and ordered inputs", () => {
+  it("bracket validation matches balance counting and queue preserves order", () => {
     verify(2, `
-      for (const [text, expected] of [["",true],["([{}])",true],[")(",false],["([)]",false],["((",false]]) equal(isBalanced(text), expected);
-      for (const nums of [[], [1], [1,1,1], [4,3,2,1], [1,2,3,4], [-3,-1,-2,0]]) {
-        const expected = nums.map((value, i) => nums.slice(i + 1).find((other) => other > value) ?? -1);
-        equal(nextGreater(nums), expected);
+      for(let length=0;length<=8;length++) for(let mask=0;mask<(1<<length);mask++) {
+        let text="",balance=0,valid=true;
+        for(let i=0;i<length;i++) {
+          const opened=Boolean(mask&(1<<i));
+          text+=opened?"(":")";
+          balance+=opened?1:-1;
+          if(balance<0) valid=false;
+        }
+        equal(isBalanced(text),valid&&balance===0);
       }
-      const testedQueue = new Queue();
-      equal(testedQueue.dequeue(), undefined);
-      for (let i = 0; i < 100; i++) testedQueue.enqueue(i);
-      for (let i = 0; i < 100; i++) equal(testedQueue.dequeue(), i);
-      equal(testedQueue.size, 0);
+      equal(processQueue([]),[]);
+      equal(processQueue(["A","B","C"]),["A","B","C"]);
+      equal(stack,[1]);
     `);
   });
 
-  it("window and prefix sums match all subarrays on signed inputs", () => {
+  it("two pointers and fixed windows match exhaustive enumeration", () => {
     verify(3, `
-      for (let mask = 0; mask < 81; mask++) {
-        let number = mask;
-        const nums = Array.from({length:4}, () => {const value = number % 3 - 1; number = Math.floor(number / 3); return value;});
-        for (let k = 1; k <= 4; k++) {
-          const sums = Array.from({length:5-k}, (_, i) => nums.slice(i,i+k).reduce((a,b)=>a+b,0));
-          equal(maxWindowSum(nums,k), Math.max(...sums));
+      for(let mask=0;mask<81;mask++) {
+        let number=mask;
+        const values=Array.from({length:4},()=>{const value=number%3-1;number=Math.floor(number/3);return value;});
+        for(let k=1;k<=4;k++) {
+          const sums=Array.from({length:5-k},(_,i)=>values.slice(i,i+k).reduce((a,b)=>a+b,0));
+          equal(maxWindowSum(values,k),Math.max(...sums));
         }
-        for (let target = -2; target <= 2; target++) {
-          let count = 0;
-          for (let i = 0; i < 4; i++) for (let j = i + 1; j <= 4; j++) if (nums.slice(i,j).reduce((a,b)=>a+b,0) === target) count++;
-          equal(countTargetSubarrays(nums,target), count);
-        }
-        const positive = nums.map((n)=>n+2);
-        for (let target = 1; target <= 13; target++) {
-          let best = Infinity;
-          for (let i = 0; i < 4; i++) for (let j = i + 1; j <= 4; j++) if (positive.slice(i,j).reduce((a,b)=>a+b,0) >= target) best = Math.min(best,j-i);
-          equal(minSubarrayLength(positive,target), best === Infinity ? 0 : best);
+        const ordered=[...values].sort((a,b)=>a-b);
+        for(let target=-3;target<=3;target++) {
+          let possible=false;
+          for(let a=0;a<4;a++) for(let b=a+1;b<4;b++) if(ordered[a]+ordered[b]===target) possible=true;
+          const pair=twoSumSorted(ordered,target);
+          equal(pair!==null,possible);
+          if(pair) {ok(pair[0]<pair[1]);equal(ordered[pair[0]]+ordered[pair[1]],target);}
         }
       }
-      equal(maxWindowSum([],1), null);
-      equal(maxWindowSum([1],0), null);
-      equal(minSubarrayLength([1,-1,5],5), 3);
-      for (const nums of [[],[3],[3,3],[-3,0,2,4,7]]) for (let target=-5;target<=15;target++) {
-        let possible=false;
-        for(let a=0;a<nums.length;a++) for(let b=a+1;b<nums.length;b++) if(nums[a]+nums[b]===target) possible=true;
-        const pair=twoSumSorted(nums,target);
-        equal(pair!==null,possible);
-        if(pair) {ok(pair[0]<pair[1]);equal(nums[pair[0]]+nums[pair[1]],target);}
-      }
+      equal(maxWindowSum([],1),null);
+      equal(maxWindowSum([1],0),null);
+      equal(twoSumSorted([3],6),null);
     `);
   });
 
-  it("binary boundaries and minimum shipping capacity match linear search", () => {
+  it("binary search finds a valid occurrence or returns minus one", () => {
     verify(4, `
-      for (const nums of [[],[1],[2,2,2],[-3,-1,0,0,7]]) for (let t=-4;t<=9;t++) {
-        const lower = nums.findIndex((n)=>n>=t);
-        const upper = nums.findIndex((n)=>n>t);
-        equal(lowerBound(nums,t), lower === -1 ? nums.length : lower);
-        equal(upperBound(nums,t), upper === -1 ? nums.length : upper);
+      for(const values of [[],[1],[2,2,2],[-3,0,2,2,7]]) for(let target=-4;target<=9;target++) {
+        const actual=binarySearch(values,target);
+        if(values.includes(target)) {ok(actual>=0&&actual<values.length);equal(values[actual],target);}
+        else equal(actual,-1);
       }
-      for (const weights of [[1],[1,2,3,4,5],[5,1,5,2],[2,2,2]]) for (let days=1;days<=6;days++) {
-        let expected = Math.max(...weights);
-        for (; expected <= weights.reduce((a,b)=>a+b,0); expected++) {
-          let used=1, load=0;
-          for (const weight of weights) {if (load+weight>expected) {used++; load=0;} load+=weight;}
-          if (used<=days) break;
-        }
-        equal(minShipCapacity(weights,days),expected);
-      }
-      equal(minShipCapacity([],1),0);
+      equal(binarySearch([1,2,3,4,5,6,7,8,9],2),1);
     `);
   });
 
-  it("BFS matches repeated edge relaxation on every 2x3 wall pattern", () => {
+  it("grid BFS matches relaxation and permutation DFS returns complete distinct paths", () => {
     verify(5, `
-      for (let mask=0;mask<64;mask++) {
+      for(let mask=0;mask<64;mask++) {
         const cells=Array.from({length:6},(_,i)=>(mask>>i)&1);
-        const testedGrid=[cells.slice(0,3),cells.slice(3)];
+        const grid=[cells.slice(0,3),cells.slice(3)];
         const dist=Array(6).fill(Infinity);
-        if (!cells[0]) dist[0]=0;
-        for (let round=0;round<6;round++) for (let a=0;a<6;a++) for (let b=0;b<6;b++) {
+        if(!cells[0]) dist[0]=0;
+        for(let round=0;round<6;round++) for(let a=0;a<6;a++) for(let b=0;b<6;b++) {
           const adjacent=Math.abs(Math.floor(a/3)-Math.floor(b/3))+Math.abs(a%3-b%3)===1;
-          if (!cells[a] && !cells[b] && adjacent) dist[b]=Math.min(dist[b],dist[a]+1);
+          if(!cells[a]&&!cells[b]&&adjacent) dist[b]=Math.min(dist[b],dist[a]+1);
         }
-        equal(shortestGridPath(testedGrid),Number.isFinite(dist[5])?dist[5]:-1);
+        equal(shortestGridPath(grid),Number.isFinite(dist[5])?dist[5]:-1);
       }
       equal(shortestGridPath([[0]]),0);
       equal(shortestGridPath([]),-1);
-      equal(countComponents(5,[[0,1],[1,2],[3,4]]),2);
-      equal(countComponents(3,[]),3);
-      equal(countComponents(0,[]),0);
-    `);
-  });
-
-  it("backtracking returns distinct complete solutions", () => {
-    verify(6, `
-      for (let target=0;target<=8;target++) {
-        const expected=[];
-        for (let ones=0;ones<=target;ones++) for (let twos=0;twos<=target;twos++) for (let threes=0;threes<=target;threes++) {
-          if (ones+twos*2+threes*3===target) expected.push([...Array(ones).fill(1),...Array(twos).fill(2),...Array(threes).fill(3)]);
-        }
-        const normalize=(list)=>list.map((item)=>JSON.stringify(item)).sort();
-        equal(normalize(combinationSum([3,1,2,2],target)),normalize(expected));
+      equal(permutations([1,2,3],2),[[1,2],[1,3],[2,1],[2,3],[3,1],[3,2]]);
+      for(let r=0;r<=4;r++) {
+        const paths=permutations([1,2,3],r);
+        equal(paths.length,[1,3,6,6,0][r]);
+        equal(new Set(paths.map(path=>JSON.stringify(path))).size,paths.length);
+        for(const path of paths) {equal(path.length,r);equal(new Set(path).size,r);}
       }
-      equal(uniquePermutations([1,1,2]),[[1,1,2],[1,2,1],[2,1,1]]);
-      equal(uniquePermutations([1,1,1]),[[1,1,1]]);
-      equal(uniquePermutations([]),[[]]);
-      equal(combinationSum([2],3),[]);
+      equal(permutations([],0),[[]]);
     `);
   });
 
-  it("meeting greedy matches exhaustive subsets and coin greedy exposes its counterexample", () => {
+  it("combination and sign DFS match independent bitmask enumeration", () => {
+    verify(6, `
+      for(const values of [[],[1,2,3],[1,2,3,4]]) for(let r=0;r<=values.length+1;r++) {
+        const expected=[];
+        for(let mask=0;mask<(1<<values.length);mask++) {
+          const chosen=values.filter((_,i)=>mask&(1<<i));
+          if(chosen.length===r) expected.push(JSON.stringify(chosen));
+        }
+        equal(combinations(values,r).map(item=>JSON.stringify(item)).sort(),expected.sort());
+      }
+      for(const values of [[],[0],[1,1,1],[1,2,3],[0,1,0]]) for(let target=-6;target<=6;target++) {
+        let expected=0;
+        for(let mask=0;mask<(1<<values.length);mask++) {
+          const sum=values.reduce((sum,value,i)=>sum+((mask&(1<<i))?value:-value),0);
+          if(sum===target) expected++;
+        }
+        equal(countTargetWays(values,target),expected);
+      }
+    `);
+  });
+
+  it("greedy coin count matches minimum-count DP and meetings match all subsets", () => {
     verify(7, `
+      const minimum=Array(201).fill(Infinity);
+      minimum[0]=0;
+      for(let value=1;value<=200;value++) for(const coin of [1,5,10,50]) if(coin<=value) minimum[value]=Math.min(minimum[value],minimum[value-coin]+1);
+      for(let amount=0;amount<=200;amount++) equal(changeCoinCount(amount),minimum[amount]);
       const pool=[[0,4],[3,5],[4,8],[8,9],[1,2],[2,6]];
-      for (let mask=0;mask<64;mask++) {
+      for(let mask=0;mask<64;mask++) {
         const meetings=pool.filter((_,i)=>mask&(1<<i));
         let best=0;
-        for (let subset=0;subset<(1<<meetings.length);subset++) {
+        for(let subset=0;subset<(1<<meetings.length);subset++) {
           const chosen=meetings.filter((_,i)=>subset&(1<<i)).sort((a,b)=>a[0]-b[0]);
-          if (chosen.every((m,i)=>i===0||m[0]>=chosen[i-1][1])) best=Math.max(best,chosen.length);
+          if(chosen.every((meeting,i)=>i===0||meeting[0]>=chosen[i-1][1])) best=Math.max(best,chosen.length);
         }
-        equal(selectMeetings(meetings).length,best);
+        equal(maxMeetingCount(meetings),best);
       }
-      equal(greedyCoinCount([1,3,4],6),3);
-      equal(greedyCoinCount([3,4],6),-1);
     `);
   });
 
-  it("DP agrees with a shortest-state search and subset knapsack", () => {
+  it("DP matches exhaustive stair paths and nonadjacent selections", () => {
     verify(8, `
-      for (const coins of [[],[2],[1,3,4],[2,5]]) for (let amount=0;amount<=15;amount++) {
-        const queue=[[0,0]], visited=new Set([0]);
-        let expected=-1;
-        for (let head=0;head<queue.length;head++) {
-          const [value,count]=queue[head];
-          if (value===amount) {expected=count;break;}
-          for (const coin of coins) if (value+coin<=amount&&!visited.has(value+coin)) {visited.add(value+coin);queue.push([value+coin,count+1]);}
-        }
-        equal(minCoins(coins,amount),expected);
+      function enumerateSteps(remaining) {
+        if(remaining===0) return 1;
+        if(remaining<0) return 0;
+        return enumerateSteps(remaining-1)+enumerateSteps(remaining-2);
       }
-      const items=[{weight:2,value:3},{weight:3,value:4},{weight:4,value:5},{weight:1,value:1}];
-      for (let capacity=0;capacity<=10;capacity++) {
+      for(let n=0;n<=12;n++) equal(climbWays(n),enumerateSteps(n));
+      for(let encoded=0;encoded<81;encoded++) {
+        let number=encoded;
+        const values=Array.from({length:4},()=>{const value=number%3;number=Math.floor(number/3);return value;});
         let best=0;
-        for (let mask=0;mask<16;mask++) {
-          let weight=0,value=0;
-          items.forEach((item,i)=>{if (mask&(1<<i)) {weight+=item.weight;value+=item.value;}});
-          if (weight<=capacity) best=Math.max(best,value);
+        for(let mask=0;mask<16;mask++) {
+          if(mask&(mask<<1)) continue;
+          const sum=values.reduce((sum,value,i)=>sum+((mask&(1<<i))?value:0),0);
+          best=Math.max(best,sum);
         }
-        equal(knapsack01(items,capacity),best);
+        equal(maxNonAdjacentSum(values),best);
       }
-      equal(knapsack01([{weight:2,value:3}],4),3);
+      equal(maxNonAdjacentSum([]),0);
+      equal(maxNonAdjacentSum([7]),7);
+      equal(maxNonAdjacentSum([2,7,9,3,1]),12);
     `);
   });
 
-  it("heap interleaving and top-k match a sorted model", () => {
+  it("numeric heap and repeated mixing agree with a sorted-array model", () => {
     verify(9, `
-      for (const direction of [1,-1]) {
-        const testedHeap=new BinaryHeap((a,b)=>direction*(a-b));
-        const model=[];
-        for (let i=0;i<200;i++) {
-          if (i%3!==2) {const value=(i*17)%31-15;testedHeap.push(value);model.push(value);}
-          else {model.sort((a,b)=>direction*(a-b));equal(testedHeap.pop(),model.shift());}
-          model.sort((a,b)=>direction*(a-b));
-          equal(testedHeap.peek(),model[0]);equal(testedHeap.size,model.length);
-        }
-        while(model.length) equal(testedHeap.pop(),model.shift());
-        equal(testedHeap.pop(),undefined);
+      const tested=new MinHeap();
+      const model=[];
+      for(let i=0;i<200;i++) {
+        if(i%3!==2) {const value=(i*17)%31-15;tested.push(value);model.push(value);}
+        else {model.sort((a,b)=>a-b);equal(tested.pop(),model.shift());}
+        model.sort((a,b)=>a-b);equal(tested.peek(),model[0]);equal(tested.size,model.length);
       }
-      for (let k=0;k<10;k++) equal(largestK([4,1,7,7,2,9],k),[9,7,7,4,2,1].slice(0,k));
+      while(model.length) equal(tested.pop(),model.shift());
+      equal(tested.pop(),undefined);
+      for(const values of [[],[0],[1,1],[0,0,1],[1,2,3,9,10,12]]) for(let target=0;target<=20;target++) {
+        const remaining=[...values];
+        let count=0;
+        while(remaining.length>0) {
+          remaining.sort((a,b)=>a-b);
+          if(remaining[0]>=target) break;
+          if(remaining.length<2) {count=-1;break;}
+          const first=remaining.shift(),second=remaining.shift();
+          remaining.push(first+second*2);count++;
+        }
+        equal(mixUntil(values,target),count);
+      }
     `);
   });
 
-  it("graph distances match Floyd-Warshall, orders respect dependencies, and MST matches subsets", () => {
+  it("graph groups and distances match transitive shortest-path closure", () => {
     verify(10, `
-      for (let seed=0;seed<20;seed++) {
-        const edges=[];
-        for (let a=0;a<4;a++) for (let b=0;b<4;b++) if (a!==b&&(a*7+b*3+seed)%3) edges.push([a,b,(a*11+b*5+seed)%9]);
-        const dist=Array.from({length:4},(_,a)=>Array.from({length:4},(_,b)=>a===b?0:Infinity));
-        for (const [a,b,w] of edges) dist[a][b]=Math.min(dist[a][b],w);
-        for (let k=0;k<4;k++) for (let a=0;a<4;a++) for (let b=0;b<4;b++) dist[a][b]=Math.min(dist[a][b],dist[a][k]+dist[k][b]);
-        for (let start=0;start<4;start++) {
-          const actual=dijkstra(4,edges,start);
-          for(let end=0;end<4;end++) ok(actual[end]===dist[start][end]);
-        }
-      }
-      const dependencies=[[0,2],[1,2],[2,3]];
-      const result=topologicalOrder(5,dependencies);
-      equal(result.length,5);
-      for(const [a,b] of dependencies) ok(result.indexOf(a)<result.indexOf(b));
-      equal(topologicalOrder(2,[[0,1],[1,0]]),null);
-      equal(topologicalOrder(0,[]),[]);
-      const connections=[[0,1,3],[0,2,-1],[0,3,4],[1,2,2],[1,3,1],[2,3,5]];
-      let best=Infinity;
+      equal(buildGraph(4,[[0,1],[0,2],[2,3]]),[[1,2],[0],[0,3],[2]]);
+      const candidates=[[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]];
       for(let mask=0;mask<64;mask++) {
-        const selected=connections.filter((_,i)=>mask&(1<<i));
-        if(selected.length!==3) continue;
-        const reached=new Set([0]);
-        for(let round=0;round<4;round++) for(const [a,b] of selected) {if(reached.has(a)) reached.add(b);if(reached.has(b)) reached.add(a);}
-        if(reached.size===4) best=Math.min(best,selected.reduce((sum,e)=>sum+e[2],0));
+        const edges=candidates.filter((_,i)=>mask&(1<<i));
+        const dist=Array.from({length:4},(_,a)=>Array.from({length:4},(_,b)=>a===b?0:Infinity));
+        for(const [a,b] of edges) {dist[a][b]=1;dist[b][a]=1;}
+        for(let k=0;k<4;k++) for(let a=0;a<4;a++) for(let b=0;b<4;b++) dist[a][b]=Math.min(dist[a][b],dist[a][k]+dist[k][b]);
+        for(let start=0;start<4;start++) for(let end=0;end<4;end++) equal(graphDistance(4,edges,start,end),Number.isFinite(dist[start][end])?dist[start][end]:-1);
+        const seen=new Set();
+        let groups=0;
+        for(let node=0;node<4;node++) {
+          if(seen.has(node)) continue;
+          groups++;
+          for(let other=0;other<4;other++) if(Number.isFinite(dist[node][other])) seen.add(other);
+        }
+        equal(countNetworks(4,edges),groups);
       }
-      equal(minimumSpanningCost(4,connections),best);
-      equal(minimumSpanningCost(3,[[0,1,2]]),null);
-      equal(minimumSpanningCost(1,[]),0);
-    `, code(slugs[8]));
+      equal(countNetworks(0,[]),0);
+      equal(graphDistance(1,[],0,0),0);
+    `);
   });
 });
