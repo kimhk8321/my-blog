@@ -1,6 +1,6 @@
 ---
-title: "유형별 알고리즘 복습 (1) — 해시·Map·Set으로 반복 탐색 줄이기"
-description: "두 수의 합과 빈도 비교를 JavaScript로 풀면서, 중첩 반복문을 해시 조회로 바꾸는 과정과 중복·순서 조건을 살펴봅니다."
+title: "유형별 알고리즘 복습 (1) — Map·Set으로 개수 세기"
+description: "JavaScript의 Map·Set 문법을 익히고, 이름별 개수 세기와 미완주자 찾기로 해시 문제를 복습합니다."
 date: "2026-10-08"
 category: "algorithm"
 series: "유형별 알고리즘 복습"
@@ -9,104 +9,108 @@ order: 1
 tags: ["알고리즘", "JavaScript", "해시", "Map", "Set", "코딩테스트"]
 ---
 
-오랜만에 알고리즘을 다시 보면 이름은 기억나는데, 막상 문제 앞에서는 손이 멈춥니다. 이번에는 유형별로 직접 코드를 써 보면서 **어떤 단서를 보고 풀이를 선택했는지**를 남겨 보려고 합니다. 언어는 평소 익숙한 JavaScript를 씁니다.
+오랜만에 알고리즘을 공부하면 개념보다 “이걸 JS로 어떻게 썼더라?”에서 막힐 때가 있습니다. 이번 시리즈는 자주 쓰는 문법을 먼저 보고, 작은 대표 예제를 직접 따라가는 방식으로 정리합니다.
 
-기존 [알고리즘 기초](/posts/algorithm-basics)가 전체 지도를 훑는 글이었다면, 이 시리즈에서는 한 문제를 단순하게 푼 뒤 불필요한 작업을 줄여 갑니다. [프로그래머스 고득점 Kit](https://school.programmers.co.kr/learn/challenges?tab=algorithm_practice_kit)의 분류도 참고했지만, 순서는 출제 빈도 순위가 아니라 복습 흐름에 맞췄습니다.
+첫 주제는 해시입니다. **이름으로 개수를 찾거나, 어떤 값이 이미 나왔는지 확인할 때** 떠올리면 됩니다. JS에서는 보통 `Map`과 `Set`을 사용합니다. 이 시리즈의 숫자 예제는 계산 결과까지 안전한 정수 범위 안에 있다고 가정합니다.
 
-수치 예제는 별도 언급이 없으면 정수이며, 합과 결과 개수도 JavaScript의 안전한 정수 범위 안에 있다고 가정합니다. 소수의 정확한 비교나 매우 큰 정수가 필요한 문제는 표현 방식부터 다시 정해야 합니다.
+## 자주 쓰는 Map 문법
 
-## 이미 본 값을 또 찾고 있다면
-
-숫자 배열에서 서로 다른 두 위치의 합이 `target`인 인덱스 한 쌍을 반환해 봅시다. 없으면 `null`을 반환합니다. 여러 답이 가능하면 그중 하나면 됩니다.
-
-가장 먼저 떠오르는 방법은 모든 쌍을 확인하는 겁니다.
+`Map`은 키와 값을 묶어 저장합니다. 이름을 키로, 등장 횟수를 값으로 두면 이름별 개수를 셀 수 있습니다.
 
 ```js
-function twoSumSlow(nums, target) {
-  for (let i = 0; i < nums.length; i++) {
-    for (let j = i + 1; j < nums.length; j++) {
-      if (nums[i] + nums[j] === target) return [i, j];
-    }
-  }
-  return null;
-}
+const counts = new Map();
+
+counts.set("kim", 2);
+counts.set("lee", 1);
+
+console.log(counts.get("kim"));
+console.log(counts.has("park"));
+console.log(counts.size);
+
+counts.delete("lee");
+console.log([...counts]);
 ```
 
-쌍은 최대 `n(n - 1) / 2`개라 시간은 O(n²), 추가 공간은 O(1)입니다. 작은 입력에서는 충분히 쓸 수 있어요. 입력이 커질 때는 안쪽 반복문이 무엇을 하는지부터 봅니다.
+결과는 순서대로 `2`, `false`, `2`, `[["kim", 2]]`입니다. `size`는 값의 합이 아니라 **서로 다른 키의 수**입니다. 존재하지 않는 키를 `get()`하면 `undefined`를 반환합니다.
 
-`nums[i]`의 상대는 결국 **`target - nums[i]`라는 특정 값**입니다. 이미 본 값의 위치를 기억하면, 상대를 찾으려고 배열을 다시 돌 필요가 없습니다.
-
-## 값을 보기 전에 상대를 조회한다
-
-```js
-function twoSum(nums, target) {
-  const seen = new Map();
-
-  for (let i = 0; i < nums.length; i++) {
-    const partner = target - nums[i];
-    if (seen.has(partner)) return [seen.get(partner), i];
-    seen.set(nums[i], i);
-  }
-  return null;
-}
-
-console.log(twoSum([2, 7, 11, 15], 9));
-console.log(twoSum([3, 3], 6));
-console.log(twoSum([3], 6));
-```
-
-결과는 차례대로 `[0, 1]`, `[0, 1]`, `null`입니다. 조회를 먼저 하고 현재 값을 나중에 넣는 순서가 중요합니다. 먼저 넣으면 `[3]`에서 자기 자신을 상대라고 잘못 찾을 수 있습니다.
-
-`[3, 3]`은 같은 값이지만 위치가 다르므로 정답입니다. “중복 값 금지”와 “같은 인덱스 재사용 금지”는 다른 조건이에요. `get()`의 결과를 참·거짓으로 판단하는 것도 피해야 합니다. 인덱스 `0`은 유효한 답이므로 존재 여부는 `has()`로 확인합니다.
-
-일반적인 해시 기반 구현에서 조회·저장을 평균 O(1)로 보면 전체 시간은 평균 O(n), 추가 공간은 O(n)입니다. 다만 JavaScript 명세가 `Map`의 모든 연산에 O(1)을 보장하는 것은 아닙니다. 명세의 요구는 평균적으로 원소 수보다 빠른 접근이며 구현은 엔진에 달려 있습니다. [MDN Map 설명](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)을 기준으로 구분해 두겠습니다.
-
-## 존재만 필요하면 Set, 개수까지 필요하면 Map
-
-배열 두 개가 순서만 다르고 같은 원소를 같은 개수만큼 갖는지 확인해 봅시다. 입력은 정수 배열입니다.
-
-`Set`만 비교하면 `[1, 1, 2]`와 `[1, 2, 2]`를 구분하지 못합니다. 종류는 같지만 횟수가 다르기 때문입니다.
-
-```js
-function sameCounts(a, b) {
-  if (a.length !== b.length) return false;
-  const counts = new Map();
-
-  for (const value of a) {
-    counts.set(value, (counts.get(value) ?? 0) + 1);
-  }
-
-  for (const value of b) {
-    const count = counts.get(value) ?? 0;
-    if (count === 0) return false;
-    if (count === 1) counts.delete(value);
-    else counts.set(value, count - 1);
-  }
-  return counts.size === 0;
-}
-
-console.log(sameCounts([1, 1, 2], [2, 1, 1]));
-console.log(sameCounts([1, 1, 2], [1, 2, 2]));
-```
-
-빈도표를 만들고 두 번째 배열로 하나씩 소모합니다. 평균 시간 O(n), 공간 O(k)이며 `k`는 서로 다른 값의 수입니다. 정렬해서 비교해도 되지만, 해시를 쓰면 입력 순서를 건드리지 않고 비교할 수 있습니다.
-
-| 필요한 정보 | 선택 |
+| 문법 | 역할 |
 | --- | --- |
-| 등장한 적이 있는가 | `Set` |
-| 몇 번 등장했는가 | 값 → 개수를 저장하는 `Map` |
-| 어디서 등장했는가 | 값 → 인덱스를 저장하는 `Map` |
-| 여러 위치를 모두 반환해야 하는가 | 값마다 인덱스 배열을 보관 |
+| `map.set(key, value)` | 저장하거나 기존 값을 변경 |
+| `map.get(key)` | 값 읽기 |
+| `map.has(key)` | 키가 있는지 확인 |
+| `map.delete(key)` | 항목 삭제 |
+| `for (const [key, value] of map)` | 키와 값을 하나씩 읽기 |
 
-## 조회가 빠르다고 문제 전체가 빨라지는 건 아니다
+## 이름별 개수 세기
 
-모든 정답 쌍을 출력해야 하고 같은 값이 아주 많다면 답 자체가 O(n²)개일 수 있습니다. 해시를 썼다고 출력 비용까지 O(n)이 되지는 않습니다. 또 객체를 키로 쓸 때는 내용이 같아도 참조가 다르면 다른 키입니다. 좌표 `[1, 2]`를 새 배열로 만들 때마다 같은 키가 된다고 생각하면 안 됩니다.
+```js
+function countNames(names) {
+  const result = new Map();
 
-반례는 최소한 이 정도를 확인해 둡니다.
+  for (const name of names) {
+    const previous = result.get(name) ?? 0;
+    result.set(name, previous + 1);
+  }
+  return result;
+}
 
-- 빈 배열과 원소 하나: 답이 없는 경우를 처리하는가?
-- `[3, 3]`: 중복 값을 올바르게 사용하는가?
-- 인덱스 0이 상대인 경우: `has()`로 존재를 확인하는가?
-- 음수와 0: 양수만 있다는 가정을 몰래 넣지 않았는가?
+console.log([...countNames(["kim", "lee", "kim"])]);
+```
 
-이번 편에서 기억할 건 `Map` 문법보다 **반복문 안에서 같은 대상을 다시 찾고 있는지**입니다. 다음 [스택·큐 편](/posts/algorithm-02-stack-queue)에서는 값을 찾는 속도보다 처리 순서가 정답을 만드는 문제를 보겠습니다.
+결과는 `[["kim", 2], ["lee", 1]]`입니다. `?? 0`은 아직 저장하지 않은 이름을 0회로 취급하기 위해 씁니다.
+
+```text
+kim 처리 → { kim: 1 }
+lee 처리 → { kim: 1, lee: 1 }
+kim 처리 → { kim: 2, lee: 1 }
+```
+
+위 표기는 Map을 읽기 쉽게 적은 것입니다. 실제로 `map[name]`을 쓰는 것이 아니라 `get()`과 `set()`으로 접근합니다.
+
+## 대표 예제: 완주하지 못한 사람 찾기
+
+참가자 중 한 사람만 완주하지 못했습니다. 동명이인이 있을 수 있습니다. 참가자의 이름별 개수를 올린 뒤, 완주한 사람의 개수를 하나씩 내리면 됩니다.
+
+```js
+function findNonCompleter(participants, completed) {
+  const remaining = countNames(participants);
+
+  for (const name of completed) {
+    remaining.set(name, remaining.get(name) - 1);
+  }
+
+  for (const [name, count] of remaining) {
+    if (count > 0) return name;
+  }
+  return null;
+}
+
+console.log(findNonCompleter(
+  ["kim", "lee", "kim", "park"],
+  ["lee", "park", "kim"],
+));
+```
+
+답은 `"kim"`입니다. 앞의 `countNames()`와 함께 실행하면 됩니다. 문제 조건은 완주자 목록이 참가자 목록에 포함되고, 정확히 한 사람이 빠진 경우입니다.
+
+```text
+참가자 집계     { kim: 2, lee: 1, park: 1 }
+lee 완주 처리   { kim: 2, lee: 0, park: 1 }
+park 완주 처리  { kim: 2, lee: 0, park: 0 }
+kim 완주 처리   { kim: 1, lee: 0, park: 0 }
+```
+
+이름마다 배열을 다시 찾는 대신 개수를 바로 읽습니다. 일반적인 해시 구현의 평균 조회 비용을 O(1)로 가정하면 시간 O(n), 공간 O(n)입니다. JS 명세가 모든 Map 조회에 O(1)을 보장하는 것은 아니며, 이 분석은 코딩테스트에서 흔히 사용하는 가정입니다. [MDN Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)을 참고했습니다.
+
+## 중복만 없애면 될 때는 Set
+
+```js
+const unique = new Set([1, 2, 2, 3, 1]);
+console.log(unique.size);
+console.log(unique.has(2));
+console.log([...unique]);
+```
+
+결과는 `3`, `true`, `[1, 2, 3]`입니다. Set은 같은 값을 한 번만 저장하므로 **종류 수**를 구할 때 편합니다. 동명이인이 몇 명인지 알아야 하는 미완주자 문제에는 Set만으로 부족합니다.
+
+다시 풀 때는 “존재만 필요하면 Set, 개수가 필요하면 Map”부터 떠올리겠습니다. 다음은 [스택·큐](/posts/algorithm-02-stack-queue)입니다.

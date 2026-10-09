@@ -45,19 +45,23 @@ export function SlidingWindowDemo() {
   );
 }
 
-const sortedValues = [1, 2, 2, 2, 4, 6, 7, 8, 9];
+const sortedValues = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 function binaryFrames(target: number) {
   let left = 0;
-  let right = sortedValues.length;
-  const frames: { left: number; right: number; mid: number | null }[] = [];
-  while (left < right) {
-    const mid = left + Math.floor((right - left) / 2);
-    frames.push({ left, right, mid });
-    if (sortedValues[mid] >= target) right = mid;
-    else left = mid + 1;
+  let right = sortedValues.length - 1;
+  const frames: { left: number; right: number; mid: number | null; result: number | null }[] = [];
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    frames.push({ left, right, mid, result: null });
+    if (sortedValues[mid] === target) {
+      frames.push({ left, right, mid, result: mid });
+      return frames;
+    }
+    if (sortedValues[mid] < target) left = mid + 1;
+    else right = mid - 1;
   }
-  frames.push({ left, right, mid: null });
+  frames.push({ left, right, mid: null, result: -1 });
   return frames;
 }
 
@@ -73,19 +77,19 @@ export function BinarySearchDemo() {
       <div className="flex items-center gap-3">
         <label htmlFor={targetId}>target</label>
         <select id={targetId} className="rounded-md border border-black/20 bg-background px-3 py-1.5 dark:border-white/20" value={target} onChange={(event) => { setTarget(Number(event.target.value)); setStep(0); }}>
-          {[0, 2, 4, 10].map((value) => <option key={value} value={value}>{value}</option>)}
+          {[1, 2, 5, 10].map((value) => <option key={value} value={value}>{value}</option>)}
         </select>
       </div>
       <div className="grid grid-cols-9 gap-1" aria-label="이분 탐색 배열">
         {sortedValues.map((value, index) => (
-          <div key={index} className={`rounded py-3 text-center font-mono ${index === frame.mid ? "bg-blue-600 text-white" : index >= frame.left && index < frame.right ? "bg-foreground/[0.08]" : "bg-foreground/[0.03] text-foreground/35"}`}>
+          <div key={index} className={`rounded py-3 text-center font-mono ${index === frame.mid ? "bg-blue-600 text-white" : index >= frame.left && index <= frame.right ? "bg-foreground/[0.08]" : "bg-foreground/[0.03] text-foreground/35"}`}>
             {value}
             <span className="block text-[10px] opacity-70">{index}</span>
           </div>
         ))}
       </div>
       <p role="status">
-        {frame.mid === null ? `탐색 완료 · lower bound 인덱스 ${frame.left}` : `left=${frame.left} · mid=${frame.mid} · right=${frame.right} · ${sortedValues[frame.mid]} ${sortedValues[frame.mid] >= target ? "≥" : "<"} ${target}`}
+        {frame.result !== null ? frame.result === -1 ? `target ${target} 없음 · 결과 -1` : `인덱스 ${frame.result}에서 ${target} 찾음` : `left=${frame.left} · mid=${frame.mid} · right=${frame.right} · 가운데 값 ${sortedValues[frame.mid!]}`}
       </p>
       <StepControls step={step} total={frames.length} onChange={setStep} />
     </div>
