@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AdminInterviewLink } from "@/components/admin-interview-link";
 
 const links = [
   { href: "/", label: "글 목록" },
@@ -72,6 +73,7 @@ export function MobileNav() {
               {link.label}
             </Link>
           ))}
+          <AdminInterviewLink onClick={() => setOpen(false)} className="block px-4 py-2.5 text-sm text-foreground/70 transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10" />
         </nav>
       )}
     </div>

@@ -41,6 +41,7 @@ function getPostFileNames(): string[] {
 }
 
 export function getPostBySlug(slug: string): Post | null {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) return null;
   const mdxPath = path.join(POSTS_DIR, `${slug}.mdx`);
   const mdPath = path.join(POSTS_DIR, `${slug}.md`);
   const filePath = fs.existsSync(mdxPath)

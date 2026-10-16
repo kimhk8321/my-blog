@@ -45,6 +45,7 @@ export function AdminGuestbook() {
 
   const logout = async () => {
     await fetch("/api/admin/logout", { method: "POST" }).catch(() => {});
+    window.dispatchEvent(new Event("admin-session-changed"));
     router.refresh();
   };
 

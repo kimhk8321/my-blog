@@ -1,5 +1,18 @@
 import { expect, test } from "@playwright/test";
 
+test("비로그인 방문자는 면접 준비 목록과 본문을 읽을 수 없다", async ({ page, request }) => {
+  const session = await request.get("/api/admin/session");
+  expect(await session.json()).toEqual({ authenticated: false });
+  expect(session.headers()["cache-control"]).toContain("no-store");
+
+  for (const path of ["/admin/interview", "/admin/interview/private-test-note"]) {
+    const response = await page.goto(path);
+    await expect(page).toHaveURL(/\/admin$/);
+    expect(response?.headers()["x-robots-tag"]).toContain("noindex");
+    await expect(page.getByRole("link", { name: "면접 준비", exact: true })).toHaveCount(0);
+  }
+});
+
 test("알고리즘 응용 다섯 편의 본문과 시리즈를 표시한다", async ({ page }) => {
   const slugs = ["01-prefix-sum", "02-monotonic-stack", "03-parametric-search", "04-dijkstra", "05-union-find"];
   const errors: string[] = [];

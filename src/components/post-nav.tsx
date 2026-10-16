@@ -1,12 +1,16 @@
 import Link from "next/link";
-import type { PostMeta } from "@/lib/posts";
+type NavItem = { slug: string; title: string };
 
 export function PostNav({
   older,
   newer,
+  basePath = "/posts",
+  prefetch,
 }: {
-  older: PostMeta | null;
-  newer: PostMeta | null;
+  older: NavItem | null;
+  newer: NavItem | null;
+  basePath?: string;
+  prefetch?: boolean;
 }) {
   if (!older && !newer) return null;
 
@@ -14,7 +18,8 @@ export function PostNav({
     <nav className="mt-16 grid grid-cols-2 gap-4 border-t border-black/10 pt-8 dark:border-white/10">
       {older ? (
         <Link
-          href={`/posts/${older.slug}`}
+          href={`${basePath}/${older.slug}`}
+          prefetch={prefetch}
           className="group flex flex-col gap-1 rounded-lg border border-black/10 p-4 transition-colors hover:border-foreground/30 dark:border-white/15"
         >
           <span className="text-xs text-foreground/50">← 이전 글</span>
@@ -28,7 +33,8 @@ export function PostNav({
 
       {newer ? (
         <Link
-          href={`/posts/${newer.slug}`}
+          href={`${basePath}/${newer.slug}`}
+          prefetch={prefetch}
           className="group flex flex-col items-end gap-1 rounded-lg border border-black/10 p-4 text-right transition-colors hover:border-foreground/30 dark:border-white/15"
         >
           <span className="text-xs text-foreground/50">다음 글 →</span>

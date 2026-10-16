@@ -27,6 +27,7 @@ export function AdminLogin() {
         return;
       }
       setPassword("");
+      window.dispatchEvent(new Event("admin-session-changed"));
       router.refresh(); // 서버에서 세션을 다시 확인하게 한다
     } catch {
       setError("네트워크 오류");

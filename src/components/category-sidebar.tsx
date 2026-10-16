@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AdminInterviewLink } from "@/components/admin-interview-link";
 
 export interface CategorySidebarItem {
   id: string;
@@ -45,6 +46,7 @@ export function CategorySidebar({ items }: { items: CategorySidebarItem[] }) {
           );
         })}
       </ul>
+      <AdminInterviewLink className={`mt-3 ${linkClass(pathname.startsWith("/admin/interview"))}`} />
     </nav>
   );
 }
