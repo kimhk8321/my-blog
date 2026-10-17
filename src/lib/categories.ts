@@ -61,6 +61,11 @@ export const categories: Category[] = [
     description: "디자인 패턴, SSR, BFF",
   },
   {
+    id: "auth",
+    label: "인증·보안",
+    description: "로그인, OAuth·OIDC·SSO, 토큰 관리, 웹 보안",
+  },
+  {
     id: "backend",
     label: "백엔드",
     description: "Node.js, API 설계, 데이터베이스, 서버 사이드 기초",

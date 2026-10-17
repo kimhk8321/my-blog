@@ -1,0 +1,208 @@
+---
+title: "계정과 인증 (1) — OAuth 2.0·OIDC·SSO, 로그인을 위임하는 구조"
+description: "소셜 로그인과 통합 계정 뒤에 있는 OAuth 2.0 Authorization Code 흐름, state와 PKCE, OIDC의 id_token, SSO의 세션 공유와 로그아웃을 프론트엔드 관점에서 정리합니다."
+date: "2026-10-17"
+category: "auth"
+series: "계정과 인증"
+seriesOrder: 1
+order: 1
+tags: ["인증", "OAuth", "OIDC", "SSO", "PKCE", "보안"]
+---
+
+[인증과 인가 — 세션 vs JWT](/posts/auth-session-jwt)에서는 우리 서비스가 직접 로그인을 처리하는 경우를 다뤘습니다. 그런데 요즘 로그인 화면에는 “카카오로 시작하기”나 “통합 계정으로 로그인” 버튼이 더 먼저 보입니다. 비밀번호를 우리 서비스가 아니라 **다른 서버가 확인하고, 우리는 그 결과만 받는 구조**입니다.
+
+이 글은 그 위임 구조를 이루는 세 가지, OAuth 2.0, OIDC, SSO를 정리합니다. 셋은 자주 섞여 쓰이지만 푸는 문제가 다릅니다.
+
+| 이름 | 푸는 문제 |
+| --- | --- |
+| OAuth 2.0 | 사용자 대신 자원에 접근할 **권한(인가)** 을 받는 방법 |
+| OIDC | OAuth 2.0 위에서 **로그인한 사람이 누구인지(인증)** 확인하는 방법 |
+| SSO | 한 번 로그인하면 **여러 서비스가 그 로그인을 같이 쓰는** 구조 |
+
+## 등장인물 네 명
+
+OAuth 문서는 역할 이름부터 낯섭니다. 카카오 로그인을 붙인 서비스로 바꿔 보면 쉽습니다.
+
+| 역할 | 뜻 | 예시 |
+| --- | --- | --- |
+| Resource Owner | 자원의 주인 | 로그인하는 사용자 |
+| Client | 사용자 대신 접근하려는 애플리케이션 | 우리 서비스 |
+| Authorization Server | 사용자를 확인하고 토큰을 발급하는 서버 | 카카오 인증 서버 |
+| Resource Server | 토큰을 받고 자원을 내주는 서버 | 카카오 사용자 정보 API |
+
+Client는 미리 Authorization Server에 등록해 `client_id`를 받고, 로그인 결과를 돌려받을 주소인 `redirect_uri`를 등록해 둡니다.
+
+## Authorization Code 흐름을 한 단계씩
+
+지금 웹과 앱에서 쓰는 기본 흐름은 Authorization Code 방식입니다.
+
+**1. 인증 서버로 보낸다.** 로그인 버튼을 누르면 브라우저를 인증 서버의 authorize 주소로 이동시킵니다.
+
+```text
+GET https://auth.example.com/authorize
+  ?response_type=code
+  &client_id=my-app
+  &redirect_uri=https://app.example.com/callback
+  &scope=openid profile
+  &state=Kq9x...            ← 이 요청을 식별하는 무작위 값
+  &code_challenge=E9Mr...   ← PKCE
+  &code_challenge_method=S256
+```
+
+**2. 사용자가 로그인하고 동의한다.** 비밀번호는 인증 서버의 화면에만 입력됩니다. 우리 서비스는 비밀번호를 볼 수 없습니다.
+
+**3. 인가 코드를 들고 돌아온다.** 인증 서버가 브라우저를 `redirect_uri`로 돌려보냅니다.
+
+```text
+https://app.example.com/callback?code=SplxlOBeZQQYbYS6WxSbIA&state=Kq9x...
+```
+
+**4. 코드를 토큰으로 바꾼다.** 코드를 받은 쪽이 토큰 엔드포인트에 직접 요청합니다.
+
+```text
+POST https://auth.example.com/token
+grant_type=authorization_code
+&code=SplxlOBeZQQYbYS6WxSbIA
+&redirect_uri=https://app.example.com/callback
+&client_id=my-app
+&code_verifier=dBjftJeZ...   ← PKCE
+```
+
+**5. 토큰을 받는다.** 응답에는 Access Token, Refresh Token, 그리고 OIDC를 쓰면 id_token이 들어 있습니다.
+
+### 왜 토큰을 바로 주지 않고 코드를 거칠까
+
+3번은 브라우저 주소창을 거쳐 전달됩니다. 주소는 브라우저 기록, 서버 로그, Referer 헤더 등 여러 곳에 남을 수 있습니다. 그래서 이 경로로는 **짧게 살고 한 번만 쓸 수 있는 코드**만 보내고, 실제 토큰은 4번처럼 서버와 직접 주고받는 요청으로 받습니다.
+
+예전에는 3번에서 토큰을 바로 주는 Implicit 방식도 있었지만, 토큰이 주소에 노출되는 문제 때문에 OAuth 2.0 보안 모범 사례(RFC 9700)에서 쓰지 말라고 정리됐습니다.
+
+## state — 내가 보낸 요청의 응답인가
+
+1번에서 보낸 `state`는 3번에서 그대로 돌아옵니다. 콜백 페이지는 돌아온 값이 **내가 보낸 값과 같은지** 확인해야 합니다.
+
+확인하지 않으면 이런 공격이 가능합니다. 공격자가 자기 계정으로 로그인 과정을 진행하다가 3번의 콜백 주소를 사용자에게 열게 합니다. 사용자 브라우저가 그 코드로 로그인을 마치면, 사용자는 **공격자 계정에 로그인된 상태**가 됩니다. 이후 사용자가 입력한 카드 정보나 검색 기록이 공격자 계정에 쌓입니다. 로그인 CSRF라고 부릅니다.
+
+```ts
+// 이동 전
+const state = crypto.randomUUID();
+sessionStorage.setItem("oauth_state", state);
+
+// 콜백에서
+const params = new URLSearchParams(location.search);
+const expected = sessionStorage.getItem("oauth_state");
+sessionStorage.removeItem("oauth_state");
+if (!expected || params.get("state") !== expected) {
+  throw new Error("로그인 요청을 확인할 수 없습니다.");
+}
+```
+
+## PKCE — 코드를 훔쳐도 못 쓰게
+
+인가 코드가 중간에 새어 나가면, 훔친 쪽이 4번을 대신 실행해 토큰을 받을 수 있습니다. 서버에서 4번을 한다면 `client_secret`이 필요하니 막히지만, SPA나 모바일 앱은 비밀값을 안전하게 숨길 곳이 없습니다.
+
+PKCE(RFC 7636)는 요청을 시작한 쪽만 아는 값을 하나 더 둡니다.
+
+1. 무작위 문자열 `code_verifier`를 만들어 보관합니다.
+2. 그 SHA-256 해시인 `code_challenge`를 1번 요청에 붙입니다.
+3. 4번에서 원래 `code_verifier`를 보냅니다. 인증 서버는 해시를 다시 계산해 1번의 값과 비교합니다.
+
+코드만 훔친 공격자는 `code_verifier`가 없으니 토큰으로 바꿀 수 없습니다. 브라우저에서는 Web Crypto로 만들 수 있습니다.
+
+```ts
+function base64url(bytes: Uint8Array): string {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+export async function createPkcePair() {
+  // 32바이트 → base64url 43자. 규격은 43~128자
+  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return { verifier, challenge: base64url(new Uint8Array(digest)) };
+}
+```
+
+처음에는 비밀값을 숨길 수 없는 클라이언트를 위해 나왔지만, 지금은 서버에서 교환하는 경우에도 PKCE를 함께 쓰라고 권합니다(RFC 9700). 코드 바꿔치기 공격까지 막아 주기 때문입니다.
+
+## OAuth는 인가, OIDC는 인증
+
+OAuth 2.0의 Access Token은 “이 토큰을 가진 쪽은 이 API를 호출해도 된다”는 **출입증**입니다. 누가 로그인했는지 알려 주는 규칙은 OAuth 2.0에 없습니다. 그래서 서비스마다 Access Token으로 사용자 정보 API를 불러 신원을 확인하는 식으로 제각각 구현했습니다.
+
+OIDC(OpenID Connect)는 그 빈칸을 채웁니다. `scope`에 `openid`를 넣으면 토큰 응답에 **id_token**이 함께 옵니다. id_token은 인증 서버가 서명한 JWT이고, “누가, 언제, 어느 서비스를 위해 로그인했는지”를 담습니다.
+
+| | Access Token | id_token |
+| --- | --- | --- |
+| 용도 | API 호출 | 로그인한 사용자 확인 |
+| 받는 쪽 | Resource Server(API) | Client(우리 서비스) |
+| 형식 | 정해져 있지 않음(JWT일 수도, 아닐 수도) | 항상 JWT |
+| 주의 | 우리 서비스가 내용을 해석하지 않는다 | API 호출에 쓰지 않는다 |
+
+id_token을 받으면 이 항목을 검증합니다.
+
+- **서명:** 인증 서버의 공개키(JWKS)로 확인합니다.
+- **iss:** 기대한 인증 서버가 발급했는가
+- **aud:** 우리 `client_id`를 위해 발급됐는가. 다른 서비스용 토큰을 받아 쓰면 안 됩니다.
+- **exp, iat:** 만료되지 않았는가
+- **nonce:** 1번 요청에 넣은 값과 같은가. id_token을 재사용하는 공격을 막습니다.
+
+사용자를 구분하는 값은 `sub`입니다. 인증 서버 안에서 바뀌지 않는 식별자라서, 이메일 대신 `iss + sub` 조합으로 계정을 찾습니다.
+
+OIDC 서버는 `/.well-known/openid-configuration` 주소에 authorize·token 엔드포인트, 공개키 주소, 지원하는 기능을 공개합니다. 라이브러리는 이 문서를 읽어 설정을 채웁니다.
+
+## 토큰은 프론트엔드가 들고 있어야 할까
+
+브라우저 SPA가 4번을 직접 하면 토큰이 자바스크립트 메모리에 놓입니다. 이 경우 Access Token은 메모리에 두고, Refresh Token은 짧게 쓰고 매번 새 것으로 바꾸는(회전) 방식으로 위험을 줄입니다.
+
+더 안전한 방법은 토큰을 브라우저에 아예 두지 않는 것입니다. 우리 서버([BFF](/posts/bff-pattern))가 4번을 하고 토큰을 보관하며, 브라우저와는 httpOnly 세션 쿠키로만 통신합니다. 스크립트가 토큰을 꺼낼 수 없으니 XSS로 토큰을 빼앗기지 않습니다. 브라우저 앱을 위한 IETF 권고 초안도 이 방식을 가장 안전한 선택으로 소개합니다.
+
+## SSO — 한 번 로그인으로 여러 서비스
+
+SSO는 새로운 프로토콜이라기보다 **OIDC 같은 위임 로그인을 여러 서비스가 같은 인증 서버로 쓰는 구조**입니다. 핵심은 인증 서버가 자기 도메인에 갖고 있는 로그인 세션입니다.
+
+```text
+1. 서비스 A → 인증 서버: 로그인 화면에서 비밀번호 입력
+   인증 서버가 자기 도메인 쿠키로 “이 브라우저는 로그인됨” 세션을 만든다
+   서비스 A는 코드를 받아 자기 세션(또는 토큰)을 만든다
+
+2. 서비스 B → 인증 서버로 이동
+   인증 서버는 세션 쿠키를 보고 로그인 화면 없이 바로 코드를 돌려준다
+   서비스 B도 자기 세션을 만든다
+```
+
+여기서 중요한 점은 서비스 A와 B가 **세션을 공유하는 게 아니라, 인증 서버의 세션을 각자 이용해 자기 세션을 만든다**는 것입니다. 그래서 세션이 세 개(인증 서버, A, B) 생기고, 각각의 수명이 다를 수 있습니다.
+
+OIDC에는 사용자에게 아무것도 묻지 않고 로그인 여부만 확인하는 `prompt=none`이 있습니다. 인증 서버에 세션이 있으면 바로 코드를 주고, 없으면 `login_required` 오류를 돌려줍니다.
+
+### SSO에서 프론트엔드가 마주치는 문제
+
+- **서드파티 쿠키 차단:** 예전에는 숨은 iframe으로 `prompt=none` 요청을 보내 세션을 조용히 확인하거나 토큰을 갱신했습니다. 지금은 Safari를 비롯한 브라우저가 iframe 안의 다른 사이트 쿠키를 막아서 이 방식이 깨지기 쉽습니다. 최상위 페이지 이동으로 확인하거나 Refresh Token으로 갱신하는 쪽으로 바뀌고 있습니다.
+- **로그아웃 범위:** 서비스 A에서 로그아웃하면 A의 세션만 지울지, 인증 서버 세션까지 지워 B도 로그아웃시킬지 정해야 합니다. 인증 서버 세션을 끝내려면 OIDC의 RP-Initiated Logout(end_session 엔드포인트)으로 보내고, 다른 서비스에 알리려면 Front-Channel·Back-Channel Logout 같은 별도 규격이 필요합니다.
+- **수명 불일치:** 서비스 세션이 끝났는데 인증 서버 세션이 살아 있으면, 사용자에게는 로그인 화면 없이 다시 로그인되는 것처럼 보입니다. 의도한 동작인지 정책으로 정해 둡니다.
+
+## 소셜 로그인과 통합 계정은 무엇이 다를까
+
+- **소셜 로그인:** 카카오·Apple 같은 **외부** 인증 서버가 사용자를 확인해 주고, 우리 서비스 하나가 그 결과를 받습니다.
+- **통합 계정(SSO):** 회사나 그룹이 **자체** 인증 서버를 두고, 여러 서비스가 그 계정 하나로 로그인합니다.
+
+둘은 함께 쓰이기도 합니다. 통합 계정의 인증 서버가 다시 카카오나 Apple 로그인을 받아 주면, 각 서비스는 통합 계정 하나만 연동하고 소셜 로그인은 인증 서버가 대신 처리합니다.
+
+## 앱 웹뷰 안에서의 OAuth
+
+앱이 웹뷰로 로그인 화면을 띄우면 앱이 그 화면의 입력을 엿볼 수 있습니다. 그래서 네이티브 앱용 권고(RFC 8252)는 웹뷰 대신 **시스템 브라우저**를 쓰라고 합니다. iOS의 `ASWebAuthenticationSession`, Android의 Custom Tabs가 그 수단입니다. Google은 임베디드 웹뷰에서 오는 OAuth 요청을 `disallowed_useragent` 오류로 거절합니다.
+
+웹뷰 안의 웹 화면에서 로그인을 시작해야 한다면, 앱과 약속한 방식으로 시스템 브라우저를 열고 결과를 앱으로 돌려받는 흐름을 함께 설계해야 합니다.
+
+## 정리
+
+| 질문 | 답 |
+| --- | --- |
+| 왜 코드를 거치나 | 주소창을 지나는 값은 노출되기 쉬워, 한 번 쓰는 코드만 보내고 토큰은 직접 요청으로 받는다 |
+| state는 | 돌아온 응답이 내가 시작한 요청의 것인지 확인한다(로그인 CSRF 방지) |
+| PKCE는 | 시작한 쪽만 아는 값으로, 코드를 훔쳐도 토큰으로 못 바꾸게 한다 |
+| OIDC는 | id_token으로 누가 로그인했는지 확인한다. 계정은 `iss + sub`로 찾는다 |
+| SSO는 | 인증 서버의 세션을 여러 서비스가 각자 이용한다. 로그아웃 범위를 정책으로 정한다 |
+
+다음 글에서는 이 흐름이 정상적으로 끝난 뒤에 생기는 문제를 다룹니다. 토큰 갱신이 겹칠 때, 로그아웃을 어디까지 해야 할 때, 같은 사람이 두 방식으로 가입했을 때처럼 실제 운영에서 더 자주 만나는 예외 상황입니다.
