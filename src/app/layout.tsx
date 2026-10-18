@@ -122,7 +122,7 @@ export default function RootLayout({
 
         <div className="flex flex-1">
           <aside className="hidden lg:block w-60 shrink-0 border-r border-black/10 dark:border-white/10">
-            <div className="sticky top-20 p-6">
+            <div className="sidebar-scroll sticky top-20 max-h-[calc(100dvh-10rem)] overflow-y-auto overscroll-contain p-6">
               <CategorySidebar items={sidebarItems} />
             </div>
           </aside>
