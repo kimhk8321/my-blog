@@ -1,0 +1,190 @@
+---
+title: "기본기 다시 다지기 (1) — 함수에 객체를 넘겨 고치면 왜 원본도 바뀔까"
+description: "원시값과 객체가 변수에 담기는 방식의 차이, 대입과 함수 인자 전달이 언제나 값의 복사라는 점, const와 불변성, 그리고 React state를 새 객체로 바꿔야 하는 이유까지 정리합니다."
+date: "2026-10-26"
+category: "javascript"
+series: "기본기 다시 다지기"
+seriesOrder: 1
+order: 1
+tags: ["JavaScript", "원시값", "참조", "불변성", "기본기"]
+---
+
+함수에 숫자를 넘겨서 바꾸면 원본은 그대로인데, 객체를 넘겨서 바꾸면 원본이 바뀝니다. 그래서 "숫자는 값 전달, 객체는 참조 전달"이라고 외우곤 합니다. 그런데 이 설명으로는 아래 코드가 설명되지 않습니다.
+
+```js
+function reset(user) {
+  user = { name: "새 사람" };   // 매개변수에 새 객체를 대입
+}
+
+const me = { name: "형기" };
+reset(me);
+console.log(me.name); // 형기
+```
+
+참조 전달이라면 `me`도 새 객체로 바뀌어야 할 것 같은데, 그대로입니다. 이 글은 이 차이가 어디서 오는지부터 정리합니다.
+
+## 원시값과 객체
+
+JavaScript의 값은 두 종류입니다.
+
+| 종류 | 타입 | 특징 |
+| --- | --- | --- |
+| 원시값 | string, number, bigint, boolean, undefined, null, symbol | **바꿀 수 없음(불변)** |
+| 객체 | 객체, 배열, 함수, Map, Date 등 | **바꿀 수 있음(가변)** |
+
+원시값이 불변이라는 건 **값 자체를 고칠 수 없다**는 뜻입니다.
+
+```js
+const text = "hello";
+const upper = text.toUpperCase();
+
+console.log(text); // hello
+console.log(upper); // HELLO
+```
+
+`toUpperCase()`는 `text`를 고친 게 아니라 **새 문자열을 만들어** 돌려줍니다. 문자열의 모든 메서드가 이렇게 동작합니다.
+
+## 변수에는 무엇이 담기나
+
+이해하기 쉬운 모델은 이렇습니다.
+
+- 원시값을 담은 변수에는 **그 값**이 들어 있다.
+- 객체를 담은 변수에는 객체 자체가 아니라 **객체가 있는 곳을 가리키는 값(참조)** 이 들어 있다.
+
+```
+let n = 1;                 n    → 1
+const user = { a: 1 };     user → (참조) ──→ { a: 1 }
+```
+
+흔히 "원시값은 스택, 객체는 힙에 저장된다"고 설명하는데, 이건 명세가 정한 규칙이 아니라 엔진이 구현하는 방식에 대한 비유입니다. 중요한 건 **객체를 담은 변수는 객체를 가리키는 참조를 들고 있다**는 점입니다.
+
+## 대입은 항상 값을 복사한다
+
+```js
+let a = 1;
+let b = a;   // 1을 복사
+b = 2;
+console.log(a); // 1
+
+const x = { count: 1 };
+const y = x;   // 참조를 복사 → 같은 객체를 가리킴
+y.count = 2;
+console.log(x.count); // 2
+```
+
+두 경우 모두 `=`는 **변수에 든 값을 복사**합니다. 차이는 복사한 값이 무엇이냐입니다.
+
+- `b = a`: 숫자 1을 복사했으니 둘은 서로 상관없습니다.
+- `y = x`: **참조**를 복사했으니 둘은 같은 객체를 가리킵니다. 한쪽에서 객체를 고치면 다른 쪽에서도 보입니다.
+
+## 함수 인자도 똑같이 복사된다
+
+함수에 인자를 넘기는 것도 대입과 같습니다. **매개변수에 인자의 값을 복사**합니다.
+
+```js
+function addOne(n) {
+  n = n + 1;
+}
+let num = 1;
+addOne(num);
+console.log(num); // 1
+
+function rename(user) {
+  user.name = "변경";   // 참조를 따라가서 객체를 고침
+}
+const me = { name: "형기" };
+rename(me);
+console.log(me.name); // 변경
+```
+
+`rename` 안의 `user`에는 `me`와 같은 참조가 복사돼 있습니다. 그 참조를 따라가 **객체를 고쳤으니** 원본도 바뀝니다.
+
+이제 처음 코드가 설명됩니다.
+
+```js
+function reset(user) {
+  user = { name: "새 사람" };   // 매개변수 user가 새 객체를 가리키게 바꿈
+}
+```
+
+이건 객체를 고친 게 아니라 **매개변수 `user`라는 지역 변수에 새 참조를 넣은 것**입니다. 바깥의 `me`는 여전히 원래 객체를 가리킵니다. 진짜 참조 전달(C++의 참조 매개변수 같은 것)이라면 바깥 변수까지 바뀌었을 겁니다.
+
+그래서 정확한 표현은 이렇습니다.
+
+> JavaScript는 **항상 값으로 전달**한다. 다만 객체의 경우 그 값이 **참조**라서, 객체를 고치면 원본에서도 보인다.
+
+이 방식을 따로 **공유에 의한 전달(call by sharing)** 이라고 부르기도 합니다.
+
+## 비교도 참조로 한다
+
+```js
+console.log(1 === 1); // true
+console.log("a" === "a"); // true
+console.log({ a: 1 } === { a: 1 }); // false
+
+const obj = { a: 1 };
+const same = obj;
+console.log(obj === same); // true
+```
+
+원시값은 값이 같으면 같습니다. 객체는 **내용이 같아도 다른 객체면 다르고**, 같은 참조일 때만 같습니다.
+
+## const는 불변이 아니다
+
+```js
+const user = { name: "형기" };
+user.name = "변경";   // 가능
+console.log(user.name); // 변경
+```
+
+`const`는 **변수에 다른 값을 다시 대입하지 못하게** 할 뿐입니다. 변수가 가리키는 객체의 내용은 고칠 수 있습니다. 객체를 고치지 못하게 하려면 `Object.freeze`를 쓰는데, 이것도 **한 단계만** 얼립니다.
+
+```js
+const config = Object.freeze({ theme: { color: "blue" } });
+config.theme.color = "red";   // 안쪽 객체는 얼지 않음
+console.log(config.theme.color); // red
+```
+
+## 복사하려면
+
+| 방법 | 범위 |
+| --- | --- |
+| `{ ...obj }`, `[...arr]`, `Object.assign` | **얕은 복사**: 바깥 한 단계만 새로 만들고 안쪽 객체는 공유 |
+| `structuredClone(obj)` | **깊은 복사**: 안쪽까지 새로 만듦 (함수는 복사 불가) |
+
+```js
+const original = { profile: { name: "형기" } };
+const shallow = { ...original };
+const deep = structuredClone(original);
+
+shallow.profile.name = "변경";
+console.log(original.profile.name); // 변경
+console.log(deep.profile.name); // 형기
+```
+
+## React state를 새 객체로 바꿔야 하는 이유
+
+이 기본기가 실무에서 가장 크게 드러나는 곳이 React입니다.
+
+```jsx
+const [todos, setTodos] = useState([]);
+
+function addTodo(text) {
+  todos.push(text);      // 기존 배열을 고침
+  setTodos(todos);       // 같은 참조를 넘김 → 화면이 안 바뀔 수 있음
+}
+```
+
+React는 새 state가 이전 state와 같은지 `Object.is`로 비교합니다. 객체는 **참조로 비교**되니까, 같은 배열을 고쳐서 넘기면 "안 바뀌었다"고 판단해 렌더를 건너뜁니다. 그래서 항상 **새 배열·새 객체**를 만들어 넘깁니다.
+
+```jsx
+setTodos([...todos, text]);                          // 추가
+setTodos(todos.filter((todo) => todo.id !== id));    // 삭제
+setUser({ ...user, name: "변경" });                   // 객체의 일부 수정
+```
+
+새 참조를 만들면 React는 "바뀌었다"는 걸 비교 한 번으로 알 수 있습니다. 내용을 하나하나 비교하지 않아도 되니 빠릅니다. 불변성을 지키는 이유가 여기 있습니다.
+
+## 정리
+
+> "원시값은 불변이고 변수에 값 자체가 담기지만, 객체는 변수에 객체를 가리키는 참조가 담깁니다. JavaScript는 대입이든 함수 인자든 항상 값을 복사해서 전달하는데, 객체는 그 값이 참조라서 같은 객체를 함께 가리키게 되고, 한쪽에서 고치면 원본에서도 보입니다. 매개변수에 새 객체를 대입하는 건 지역 변수만 바꾸는 것이라 원본은 그대로입니다. React가 state를 Object.is로 참조 비교하기 때문에, state는 고치지 않고 새 객체로 바꿔야 변경이 감지됩니다."

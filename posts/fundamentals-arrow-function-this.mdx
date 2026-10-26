@@ -1,0 +1,226 @@
+---
+title: "기본기 다시 다지기 (3) — 화살표 함수의 this는 왜 바깥을 따라갈까"
+description: "일반 함수의 this가 호출 방식으로 정해지는 네 가지 규칙과, 화살표 함수가 자기 this를 만들지 않아서 스코프 체인을 따라 바깥 this를 찾게 되는 이유를 명세의 환경 레코드 관점에서 정리합니다."
+date: "2026-10-26"
+category: "javascript"
+series: "기본기 다시 다지기"
+seriesOrder: 3
+order: 3
+tags: ["JavaScript", "this", "화살표 함수", "실행 컨텍스트", "기본기"]
+---
+
+"화살표 함수의 this는 바깥 this를 따라간다." 많이들 이렇게 외웁니다. 그런데 **왜** 따라갈까요? 그리고 "바깥"은 정확히 어디일까요? 이번 글은 일반 함수의 `this`가 정해지는 방식부터 보고, 화살표 함수가 왜 다르게 동작하는지를 JavaScript 명세의 구조로 설명합니다.
+
+## 일반 함수의 this: 호출하는 방식이 정한다
+
+일반 함수(`function`)의 `this`는 함수를 **작성한 곳이 아니라 호출하는 방식**으로 정해집니다. 규칙은 네 가지입니다.
+
+### 1. 객체의 메서드로 호출: 점 앞의 객체
+
+```js
+const user = {
+  name: "형기",
+  hello() {
+    return this.name;
+  },
+};
+
+console.log(user.hello()); // 형기
+```
+
+`user.hello()`처럼 **점 앞에 객체가 있으면** 그 객체가 `this`입니다.
+
+### 2. 그냥 호출: undefined (strict mode)
+
+```js
+"use strict";
+const user = {
+  name: "형기",
+  hello() {
+    return this;
+  },
+};
+
+const hello = user.hello;   // 함수만 꺼냄
+console.log(hello()); // undefined
+```
+
+같은 함수인데 **점 앞에 아무것도 없이** 호출하면 `this`가 사라집니다. strict mode에서는 `undefined`, 아니면 전역 객체(`window`)입니다. 클래스와 ES 모듈 안은 자동으로 strict mode입니다.
+
+### 3. call, apply, bind: 직접 지정
+
+```js
+function hello() {
+  return this.name;
+}
+
+console.log(hello.call({ name: "철수" })); // 철수
+const bound = hello.bind({ name: "영희" });
+console.log(bound()); // 영희
+```
+
+### 4. new로 호출: 새로 만든 객체
+
+```js
+function User(name) {
+  this.name = name;
+}
+
+const user = new User("형기");
+console.log(user.name); // 형기
+```
+
+이 네 규칙의 공통점은, **같은 함수라도 어떻게 부르느냐에 따라 this가 바뀐다**는 것입니다. 이게 콜백에서 문제가 됩니다.
+
+## 문제: 콜백으로 넘기면 this를 잃는다
+
+```js
+const timer = {
+  seconds: 0,
+  start() {
+    setTimeout(function () {
+      this.seconds += 1;   // 여기서 this는 timer가 아님
+    }, 1000);
+  },
+};
+```
+
+`setTimeout`이 1초 뒤에 콜백을 **그냥 호출**하기 때문에, 콜백 안의 `this`는 `timer`가 아닙니다. 2번 규칙입니다. ES2015 이전에는 이렇게 피했습니다.
+
+```js
+start() {
+  var self = this;                 // 바깥 this를 변수에 담아 둠
+  setTimeout(function () {
+    self.seconds += 1;             // 클로저로 꺼내 씀
+  }, 1000);
+}
+```
+
+`this`를 변수에 담아 두면 **클로저**로 꺼내 쓸 수 있습니다. 변수는 렉시컬 스코프를 따르니까요. 화살표 함수는 바로 이 패턴을 언어에 넣은 것입니다.
+
+```js
+start() {
+  setTimeout(() => {
+    this.seconds += 1;             // timer
+  }, 1000);
+}
+```
+
+## 왜 바깥을 따라가나: 명세로 보면
+
+### 함수를 호출하면 환경 레코드가 만들어진다
+
+함수를 호출하면 JavaScript 엔진은 그 호출을 위한 **환경 레코드(Environment Record)** 를 만듭니다. 이 안에 그 함수의 지역 변수와 매개변수, 그리고 **`this` 값**이 저장됩니다. 환경 레코드는 자기를 감싸는 바깥 환경을 가리키는 연결도 갖고 있어서, 변수를 찾을 때 이 연결을 따라 바깥으로 올라갑니다. 이게 스코프 체인입니다. 2편의 프로토타입 체인이 "속성"을 찾는 연결이라면, 스코프 체인은 "변수"를 찾는 연결입니다.
+
+### 일반 함수는 호출될 때 자기 this를 저장한다
+
+일반 함수를 호출하면 엔진은 호출 방식(점 앞의 객체, call의 인자, new 등)으로 `this` 값을 정해서 **새 환경 레코드에 저장**합니다. 명세에서는 이 함수의 환경 레코드가 "this 바인딩을 가지고 있다"고 표현합니다.
+
+### 화살표 함수는 this를 저장하지 않는다
+
+명세는 모든 함수에 `[[ThisMode]]`라는 내부 값을 둡니다. 화살표 함수는 이 값이 **lexical**입니다. 화살표 함수를 호출하면 환경 레코드는 만들지만, **`this`를 정해서 저장하는 단계를 아예 건너뜁니다.** 그래서 화살표 함수의 환경 레코드는 "this 바인딩이 없다"고 답합니다.
+
+### this를 찾을 때는 바깥으로 올라간다
+
+코드에서 `this`를 만나면 엔진은 이렇게 찾습니다(명세의 GetThisEnvironment).
+
+1. 지금 환경 레코드에 this 바인딩이 있나? 있으면 그 값을 씁니다.
+2. 없으면 **바깥 환경으로 한 단계** 올라가서 다시 묻습니다.
+3. this 바인딩을 가진 환경을 만날 때까지 반복합니다.
+
+화살표 함수 안의 `this`는 1번에서 "없음"이 나오니까, 바깥으로 올라가 **가장 가까운 일반 함수(또는 전역·모듈)** 의 this를 쓰게 됩니다.
+
+```
+timer.start() 호출 → start의 환경 레코드: this = timer  ← 여기서 찾음
+   └ 화살표 함수 호출 → 화살표의 환경 레코드: this 없음 → 바깥으로
+```
+
+즉 화살표 함수의 `this`는 **변수를 찾는 것과 똑같은 방식**으로 찾아집니다. 그래서 "바깥"은 **호출한 곳이 아니라 화살표 함수를 작성한 곳의 바깥**입니다. 렉시컬 스코프 규칙 그대로입니다.
+
+## 그래서 생기는 화살표 함수의 특징
+
+this를 스스로 정하지 않기 때문에 따라오는 결과들입니다.
+
+### call, apply, bind로 this를 바꿀 수 없다
+
+```js
+const arrow = () => this;
+const obj = { name: "형기" };
+
+console.log(arrow.call(obj) === obj); // false
+```
+
+`call`은 "이 값을 this로 저장해 줘"라는 요청인데, 화살표 함수는 this를 저장하는 단계가 없어서 그 값을 무시합니다.
+
+### new로 호출할 수 없다
+
+```js
+const Arrow = () => {};
+try {
+  new Arrow();
+} catch (error) {
+  console.log(error instanceof TypeError); // true
+}
+```
+
+`new`는 "새 객체를 만들어 this로 저장해 줘"라는 동작인데, 화살표 함수는 그럴 수 없으니 생성자가 될 수 없습니다. 그래서 `prototype` 속성도 없습니다.
+
+### arguments도 바깥 것을 쓴다
+
+같은 이유로 화살표 함수에는 자기 `arguments`가 없고, 바깥 일반 함수의 `arguments`를 씁니다. 화살표 함수에서 인자 목록이 필요하면 나머지 매개변수(`...args`)를 씁니다.
+
+## 화살표 함수를 쓰면 안 되는 곳
+
+### 객체의 메서드
+
+```js
+const user = {
+  name: "형기",
+  hello: () => this?.name,
+};
+
+console.log(user.hello()); // undefined
+```
+
+`user.hello()`로 불러도 화살표 함수는 점 앞의 객체를 보지 않습니다. 작성한 곳의 바깥(모듈 최상위)의 this를 쓰는데, ES 모듈 최상위의 this는 `undefined`입니다. 객체 메서드는 메서드 문법(`hello() {}`)으로 씁니다. 화살표 함수가 감싸는 함수의 this를 쓴다는 건, **객체 리터럴의 중괄호는 스코프를 만들지 않는다**는 뜻이기도 합니다.
+
+### this로 이벤트 대상을 써야 하는 핸들러
+
+```js
+button.addEventListener("click", function () {
+  this.classList.toggle("active");   // this = button
+});
+```
+
+DOM 이벤트 핸들러를 일반 함수로 등록하면 `this`가 이벤트가 걸린 요소입니다. 화살표 함수로 바꾸면 이 동작을 잃습니다. 화살표 함수를 쓰고 싶다면 `event.currentTarget`을 씁니다.
+
+## 클래스 필드의 화살표 함수
+
+```js
+class Counter {
+  count = 0;
+  increase = () => {
+    this.count += 1;
+  };
+}
+
+const counter = new Counter();
+const { increase } = counter;   // 메서드를 꺼내도
+increase();
+console.log(counter.count); // 1
+```
+
+클래스 필드는 **인스턴스를 만들 때, this가 그 인스턴스인 상태에서** 실행됩니다. 그때 만든 화살표 함수는 바깥 this, 즉 인스턴스를 영원히 기억합니다. 그래서 메서드를 꺼내서 콜백으로 넘겨도 this를 잃지 않습니다. React 클래스 컴포넌트 시절 `handleClick = () => {}`를 많이 쓴 이유입니다. 다만 2편에서 본 것처럼 이 함수는 프로토타입이 아니라 **인스턴스마다 하나씩** 생깁니다.
+
+## 정리
+
+| | 일반 함수 | 화살표 함수 |
+| --- | --- | --- |
+| this를 정하는 때 | 호출할 때, 호출 방식으로 | 정하지 않음 |
+| this를 찾는 방법 | 자기 환경 레코드에 저장된 값 | 스코프 체인을 따라 바깥 함수의 this |
+| call·apply·bind | this를 바꿀 수 있음 | 무시됨 |
+| new | 가능 | 불가 (TypeError) |
+| arguments | 자기 것 | 바깥 것 |
+| 어울리는 곳 | 객체 메서드, 생성자, this가 필요한 이벤트 핸들러 | 콜백, 배열 메서드, 바깥 this를 유지해야 하는 곳 |
+
+> "일반 함수의 this는 호출할 때 호출 방식으로 정해져서 함수의 환경 레코드에 저장됩니다. 화살표 함수는 this를 저장하는 단계가 없어서, this를 만나면 변수를 찾을 때처럼 스코프 체인을 따라 바깥으로 올라가 가장 가까운 일반 함수의 this를 씁니다. 그래서 화살표 함수의 this는 작성한 위치로 정해지고, call이나 bind로 바꿀 수 없고, 생성자로도 쓸 수 없습니다."

@@ -1,0 +1,145 @@
+---
+title: "기본기 다시 다지기 (7) — setState(count + 1)을 두 번 써도 1만 늘어나는 이유"
+description: "count가 렌더마다 새로 만들어지는 상수라는 JavaScript 관점과, React가 상태 변경을 큐에 모았다가 한 번에 처리하는 관점으로 state 스냅샷, 배칭, 업데이터 함수를 정리합니다."
+date: "2026-10-26"
+category: "react"
+series: "기본기 다시 다지기"
+seriesOrder: 7
+order: 7
+tags: ["React", "useState", "배칭", "클로저", "기본기"]
+---
+
+React를 처음 배울 때 한 번쯤 만나는 코드입니다.
+
+```jsx
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  function handleClick() {
+    setCount(count + 1);
+    setCount(count + 1);
+  }
+
+  return <button onClick={handleClick}>{count}</button>;
+}
+```
+
+버튼을 누르면 2가 될 것 같지만 **1**이 됩니다. 흔히 "setState는 비동기라서"라고 설명하는데, 이 설명은 반만 맞습니다. 정확한 이유는 두 가지이고, 둘 다 기본기와 연결됩니다.
+
+## 이유 1. count는 이번 렌더의 상수다 (JavaScript 관점)
+
+먼저 `count`가 무엇인지 봅시다.
+
+```jsx
+const [count, setCount] = useState(0);
+```
+
+`count`는 **`const`로 선언한 지역 변수**입니다. 컴포넌트는 함수이고, React는 화면을 그릴 때마다 이 함수를 **새로 호출**합니다. 호출할 때마다 `count`라는 변수도 새로 만들어집니다.
+
+```
+첫 번째 렌더: Counter() 호출 → count = 0인 변수 생성
+두 번째 렌더: Counter() 다시 호출 → count = 1인 새 변수 생성
+```
+
+`setCount`는 지금 있는 `count` 변수의 값을 바꾸지 않습니다. `const`라서 바꿀 수도 없습니다. **"다음 렌더 때 이 값으로 해 달라"고 React에 요청**만 합니다.
+
+그러면 첫 번째 렌더에서 만든 `handleClick`은 어떤 `count`를 볼까요? 3편에서 본 것처럼, 함수는 **자기가 작성된 곳의 변수**를 클로저로 기억합니다. `handleClick`은 첫 번째 렌더 안에서 만들어졌으니, 첫 번째 렌더의 `count`, 즉 **0**을 봅니다.
+
+```jsx
+function handleClick() {
+  setCount(count + 1);   // setCount(0 + 1) → "1로 바꿔 줘"
+  setCount(count + 1);   // setCount(0 + 1) → "1로 바꿔 줘"
+}
+```
+
+두 줄 모두 "1로 바꿔 줘"라는 같은 요청입니다. 1로 바꾸고 다시 1로 바꾸니 결과는 1입니다.
+
+React 문서는 이걸 **"state는 스냅샷이다"** 라고 표현합니다. 한 번의 렌더 안에서 state는 사진처럼 고정돼 있고, 그 렌더에서 만든 이벤트 핸들러는 그 사진만 봅니다.
+
+### await을 넣어도 마찬가지다
+
+"비동기라서"가 반만 맞는 이유가 여기 있습니다. 시간이 지나도 값은 바뀌지 않습니다.
+
+```jsx
+async function handleClick() {
+  setCount(count + 1);
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  console.log(count);   // 1초가 지나 화면은 1로 바뀌었지만, 여기서는 여전히 0
+}
+```
+
+1초 뒤에는 이미 다시 렌더돼서 화면에는 1이 보입니다. 하지만 이 함수가 보는 `count`는 **이 함수를 만든 렌더의 변수**라서 계속 0입니다. 늦게 반영돼서가 아니라, **애초에 다른 렌더의 변수**를 보고 있는 것입니다.
+
+## 이유 2. React는 요청을 큐에 모았다가 한 번에 처리한다 (React 관점)
+
+`setCount`를 부를 때마다 바로 렌더하면, 이벤트 핸들러 안에서 상태를 세 번 바꿀 때 화면이 세 번 다시 그려집니다. 그래서 React는 **요청을 큐(대기열)에 쌓아 두고**, 이벤트 핸들러 코드가 다 끝난 뒤에 큐를 한 번에 처리해서 **한 번만 렌더**합니다. 이걸 **배칭(batching)** 이라고 합니다.
+
+React 18부터는 이벤트 핸들러뿐 아니라 Promise, setTimeout 안의 업데이트도 자동으로 묶습니다(자동 배칭). React 17까지는 이벤트 핸들러 안에서만 묶였습니다.
+
+큐를 처리하는 규칙은 단순합니다.
+
+- **값**이 들어 있으면: 그 값으로 교체
+- **함수**가 들어 있으면: 직전 결과를 넣어 실행한 반환값으로 교체
+
+이 규칙을 그대로 코드로 옮기면 이렇습니다.
+
+```js
+function processQueue(baseState, queue) {
+  let state = baseState;
+  for (const update of queue) {
+    state = typeof update === "function" ? update(state) : update;
+  }
+  return state;
+}
+
+const count = 0;
+
+// setCount(count + 1); setCount(count + 1);
+console.log(processQueue(count, [count + 1, count + 1])); // 1
+
+// setCount(n => n + 1); setCount(n => n + 1);
+console.log(processQueue(count, [(n) => n + 1, (n) => n + 1])); // 2
+
+// setCount(count + 5); setCount(n => n + 1);
+console.log(processQueue(count, [count + 5, (n) => n + 1])); // 6
+
+// setCount(n => n + 1); setCount(42);
+console.log(processQueue(count, [(n) => n + 1, 42])); // 42
+```
+
+React 내부 구현은 이보다 훨씬 복잡하지만, **결과를 계산하는 규칙**은 이것과 같습니다.
+
+## 해결: 업데이터 함수를 넘긴다
+
+이전 값을 기준으로 여러 번 바꾸려면 값 대신 **함수**를 넘깁니다.
+
+```jsx
+function handleClick() {
+  setCount((n) => n + 1);   // 큐: n => n + 1
+  setCount((n) => n + 1);   // 큐: n => n + 1
+}
+// 처리: 0 → 1 → 2
+```
+
+이 함수를 **업데이터 함수**라고 합니다. 업데이터 함수는 렌더 스냅샷의 `count`를 보지 않고, **큐에서 직전에 계산된 값**을 인자로 받습니다. 그래서 두 번 쓰면 두 번 늘어납니다.
+
+## 언제 업데이터 함수를 쓰나
+
+| 상황 | 써야 하나 |
+| --- | --- |
+| 한 핸들러에서 같은 state를 여러 번 바꿈 | 쓴다 |
+| 비동기 작업 뒤에 이전 값을 기준으로 바꿈 (`await` 뒤, 타이머, 구독 콜백) | 쓴다. 클로저의 값이 오래됐을 수 있음 |
+| 새 값이 이전 값과 상관없음 (`setName(e.target.value)`) | 필요 없음 |
+| 한 번만 바꾸고 다른 곳에서 동시에 바꿀 일이 없음 | 둘 다 결과 같음. 팀 규칙에 따름 |
+
+특히 두 번째가 실무에서 자주 나오는 버그입니다. 예를 들어 `setInterval` 안에서 `setCount(count + 1)`을 쓰면, interval 콜백이 처음 렌더의 `count`만 계속 보고 있어서 숫자가 1에서 멈춥니다. `setCount((n) => n + 1)`로 바꾸면 해결됩니다.
+
+## 왜 이렇게 설계했을까
+
+state를 렌더마다 고정된 스냅샷으로 두면, **한 렌더 안에서 화면과 이벤트 핸들러가 항상 같은 값을 봅니다.** 핸들러 실행 중에 값이 바뀌어 버리면, 화면에는 0이 보이는데 코드에서는 2를 보는 식으로 어긋날 수 있습니다. 또 여러 변경을 큐에 모았다가 한 번에 처리하면 중간 상태가 화면에 그려지지 않고 렌더 횟수도 줄어듭니다.
+
+## 정리
+
+> "count는 이번 렌더에서 만들어진 const 지역 변수이고, setCount는 그 변수를 바꾸지 않고 다음 렌더를 요청만 합니다. 그래서 이벤트 핸들러는 클로저로 이번 렌더의 count를 계속 보고, setCount(count + 1)을 두 번 써도 두 번 모두 '1로 바꿔 달라'는 같은 요청이 됩니다. React는 이런 요청을 큐에 모아 한 번에 처리하는데, 값은 그대로 교체하고 함수는 직전 결과를 받아 실행하므로, 이전 값을 기준으로 여러 번 바꾸려면 setCount(n => n + 1)처럼 업데이터 함수를 씁니다."
+
+이 글은 3편의 클로저·스코프 체인과 같은 원리입니다. 함수는 자기가 만들어진 곳의 변수를 기억하고, React 컴포넌트는 렌더마다 새로 호출되는 함수라는 점만 붙잡으면 대부분의 "state가 이상하게 보이는" 문제가 설명됩니다.

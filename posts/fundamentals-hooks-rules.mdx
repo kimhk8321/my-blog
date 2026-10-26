@@ -1,0 +1,181 @@
+---
+title: "기본기 다시 다지기 (8) — 훅은 왜 if문 안에서 부르면 안 될까"
+description: "useState에는 이름이 없는데 React는 어떻게 각 state를 구분할까요? 훅을 호출 순서로 찾는 구조를 작은 useState를 직접 만들어 확인하고, 훅 규칙이 생긴 이유와 커스텀 훅, use의 예외까지 정리합니다."
+date: "2026-10-26"
+category: "react"
+series: "기본기 다시 다지기"
+seriesOrder: 8
+order: 8
+tags: ["React", "Hooks", "useState", "훅 규칙", "기본기"]
+---
+
+React 문서에는 훅 규칙이 두 가지 있습니다.
+
+1. 훅은 **컴포넌트의 최상위**에서만 호출한다. if문, 반복문, 중첩 함수 안에서 부르지 않는다.
+2. 훅은 **React 함수 컴포넌트나 커스텀 훅 안**에서만 호출한다.
+
+규칙은 다들 알지만, 이유를 물으면 "React가 그렇게 정했으니까"에서 막힙니다. 이번 글은 그 이유를 직접 만들어 보면서 확인합니다.
+
+## useState에는 이름이 없다
+
+```jsx
+function Profile() {
+  const [name, setName] = useState("형기");
+  const [age, setAge] = useState(30);
+  const [city, setCity] = useState("서울");
+}
+```
+
+`name`, `age`, `city`는 **우리가 붙인 변수 이름**일 뿐, React에 전달되지 않습니다. React가 받는 건 `useState("형기")`, `useState(30)`, `useState("서울")`처럼 **초깃값뿐**입니다.
+
+그런데 7편에서 본 것처럼 컴포넌트는 렌더할 때마다 **새로 호출되는 함수**이고, 그 안의 변수도 매번 새로 만들어집니다. 그럼 두 번째 렌더에서 `useState("형기")`가 다시 호출됐을 때, React는 이게 "이름 state"라는 걸 어떻게 알고 저장해 둔 값을 돌려줄까요?
+
+답은 **호출 순서**입니다. React는 컴포넌트마다 훅 값을 담는 **칸들을 순서대로** 갖고 있고, "이번 렌더에서 첫 번째로 호출된 훅은 첫 번째 칸, 두 번째는 두 번째 칸"으로 찾습니다.
+
+## 작은 useState를 직접 만들어 보기
+
+이 구조를 그대로 코드로 만들면 이렇습니다.
+
+```js
+function createRuntime() {
+  const slots = [];   // 이 컴포넌트의 훅 값이 순서대로 저장되는 칸
+  let index = 0;      // 지금 몇 번째 훅을 호출하는 중인지
+
+  function useState(initial) {
+    const i = index;
+    if (!(i in slots)) slots[i] = initial;   // 첫 렌더에만 초깃값 저장
+    const setState = (value) => {
+      slots[i] = value;
+    };
+    index += 1;
+    return [slots[i], setState];
+  }
+
+  function render(Component, props) {
+    index = 0;   // 렌더할 때마다 0번 칸부터 다시 센다
+    return Component(props);
+  }
+
+  return { useState, render };
+}
+```
+
+- `slots`는 이 컴포넌트의 훅 값을 담는 칸들입니다.
+- `useState`가 호출될 때마다 `index` 번째 칸을 쓰고 `index`를 하나 올립니다.
+- `render`는 컴포넌트를 호출하기 전에 `index`를 0으로 되돌립니다.
+- `setState`는 자기 칸 번호(`i`)를 클로저로 기억하고 있다가 그 칸을 바꿉니다.
+
+이 정도로도 state가 렌더 사이에 유지됩니다.
+
+```js
+const counter = createRuntime();
+function Counter() {
+  const [count, setCount] = counter.useState(0);
+  return { count, setCount };
+}
+
+const first = counter.render(Counter);
+first.setCount(1);
+console.log(counter.render(Counter).count); // 1
+```
+
+## if문 안에서 부르면 생기는 일
+
+이제 훅 하나를 조건부로 호출해 봅니다.
+
+```js
+const { useState, render } = createRuntime();
+
+function Profile({ showAge }) {
+  const [name] = useState("형기");
+  let age = "-";
+  if (showAge) {
+    [age] = useState(30);   // 조건에 따라 호출되는 훅
+  }
+  const [city] = useState("서울");
+  return `${name} / ${age} / ${city}`;
+}
+
+console.log(render(Profile, { showAge: true })); // 형기 / 30 / 서울
+console.log(render(Profile, { showAge: false })); // 형기 / - / 30
+```
+
+두 번째 렌더에서 **도시가 30**으로 나옵니다. 칸을 따라가 보면 이유가 보입니다.
+
+| 칸 | 첫 번째 렌더 (showAge: true) | 두 번째 렌더 (showAge: false) |
+| --- | --- | --- |
+| 0번 | name → "형기" | name → "형기" |
+| 1번 | age → 30 | **city → 30** (원래 age의 칸) |
+| 2번 | city → "서울" | (아무도 안 씀) |
+
+`age` 훅을 건너뛰자 `city` 훅이 한 칸 앞당겨져서, **age의 칸을 자기 칸으로 읽었습니다.** 오류도 나지 않고 조용히 엉뚱한 값을 씁니다. useState뿐 아니라 useEffect, useRef, useMemo도 모두 같은 칸 목록을 쓰니까, 순서가 어긋나면 Effect가 다른 Effect의 정리 함수를 실행하는 식으로 더 이상한 일이 생깁니다.
+
+이게 첫 번째 규칙의 이유입니다. **매 렌더마다 훅이 같은 순서, 같은 개수로 호출돼야** 칸이 맞습니다.
+
+## 실제 React도 같은 원리다
+
+실제 React는 위 코드보다 훨씬 정교하지만 원리는 같습니다. 화면의 컴포넌트마다 내부 객체(Fiber)가 있고, 그 안에 훅 값들이 **호출 순서대로 연결된 목록**으로 저장됩니다. 렌더할 때 React는 이 목록을 처음부터 하나씩 따라가며 훅 호출과 짝을 맞춥니다.
+
+개발 모드에서는 순서가 바뀐 걸 감지하면 "훅 호출 순서가 바뀌었다"는 경고를 띄우고, 훅 개수가 달라지면 "Rendered fewer hooks than expected" 같은 오류를 냅니다. `eslint-plugin-react-hooks`의 `rules-of-hooks` 규칙은 이런 코드를 작성하는 단계에서 잡아 줍니다.
+
+## 조건이 필요하면 훅 안에서 분기한다
+
+훅 호출 자체는 항상 하고, **조건은 훅 안이나 값에** 둡니다.
+
+```jsx
+// 잘못된 예
+if (isLoggedIn) {
+  useEffect(() => { subscribe(); }, []);
+}
+
+// 올바른 예
+useEffect(() => {
+  if (!isLoggedIn) return;
+  subscribe();
+}, [isLoggedIn]);
+```
+
+```jsx
+// 조건부 state가 필요하면 state는 항상 만들고, 쓸지 말지를 정함
+const [age, setAge] = useState(30);
+return <p>{showAge ? age : "-"}</p>;
+```
+
+다른 컴포넌트로 분리해서 **컴포넌트 자체를 조건부로 렌더**하는 방법도 있습니다. 컴포넌트가 다르면 칸 목록도 따로 갖기 때문입니다.
+
+```jsx
+{showAge && <AgeField />}   // AgeField 안에서는 훅을 자유롭게 씀
+```
+
+## 두 번째 규칙: 왜 컴포넌트 안에서만 부르나
+
+위 코드의 `render`가 `index`를 0으로 되돌리고 **지금 어떤 컴포넌트의 칸을 쓰는지** 정해 주듯이, React도 렌더 중인 컴포넌트를 알고 있을 때만 칸을 찾을 수 있습니다. 일반 함수나 이벤트 핸들러에서 훅을 부르면 "지금 렌더 중인 컴포넌트"가 없어서 어느 칸 목록을 써야 할지 알 수 없습니다.
+
+## 커스텀 훅은 칸을 나눠 쓰는 함수다
+
+```jsx
+function useToggle(initial = false) {
+  const [on, setOn] = useState(initial);
+  const toggle = () => setOn((v) => !v);
+  return [on, toggle];
+}
+
+function Settings() {
+  const [dark, toggleDark] = useToggle();
+  const [sound, toggleSound] = useToggle(true);
+}
+```
+
+커스텀 훅은 특별한 문법이 아니라 **훅을 부르는 함수**입니다. `useToggle`을 두 번 부르면 그 안의 `useState`도 두 번 호출되어, `Settings`의 칸 목록에 **칸 두 개가 차례로** 생깁니다. 그래서 같은 커스텀 훅을 여러 번, 여러 컴포넌트에서 써도 state가 공유되지 않고 각자 따로 생깁니다. 이름이 `use`로 시작해야 하는 이유는, 린트 규칙이 "이 함수 안에서도 훅 규칙을 지켜야 한다"는 걸 알아보게 하기 위해서입니다.
+
+## 예외: use
+
+React 19의 `use`는 if문이나 반복문 안에서 불러도 됩니다. `use`는 위의 칸 목록에 값을 저장하지 않고, 넘겨받은 Promise나 Context의 값을 **그때그때 읽기만** 하기 때문입니다. 칸을 쓰지 않으니 순서가 바뀌어도 문제가 없습니다.
+
+## 왜 이름 대신 순서를 택했을까
+
+`useState("name", "형기")`처럼 키를 붙이는 방식도 생각할 수 있습니다. 하지만 그러면 커스텀 훅을 두 번 부를 때 같은 키가 겹치고, 라이브러리 훅과 내 훅의 키가 충돌할 수 있습니다. 순서 방식은 키를 관리할 필요가 없고, 훅을 함수처럼 자유롭게 조합할 수 있습니다. 대신 "순서를 바꾸지 말 것"이라는 규칙 하나를 지키게 한 것입니다.
+
+## 정리
+
+> "useState에는 이름이 없어서, React는 컴포넌트마다 훅 값을 담는 칸을 호출 순서대로 저장해 두고 렌더할 때 같은 순서로 짝을 맞춥니다. if문 안에서 훅을 부르면 렌더마다 호출 순서가 달라져 뒤의 훅이 다른 훅의 칸을 읽게 되므로, 훅은 항상 최상위에서 같은 순서로 호출하고 조건은 훅 안에서 처리합니다. 훅이 컴포넌트나 커스텀 훅 안에서만 동작하는 것도, React가 지금 렌더 중인 컴포넌트의 칸 목록을 알아야 하기 때문입니다."

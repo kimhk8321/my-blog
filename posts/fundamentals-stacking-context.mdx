@@ -1,0 +1,150 @@
+---
+title: "기본기 다시 다지기 (6) — z-index 9999인데 왜 안 올라올까: 쌓임 맥락"
+description: "z-index가 같은 쌓임 맥락 안에서만 비교되는 이유, 쌓임 맥락을 만드는 속성들, 한 쌓임 맥락 안에서 요소를 그리는 순서, 그리고 모달과 드롭다운을 안전하게 띄우는 방법을 정리합니다."
+date: "2026-10-26"
+category: "styling"
+series: "기본기 다시 다지기"
+seriesOrder: 6
+order: 6
+tags: ["CSS", "z-index", "쌓임 맥락", "stacking context", "기본기"]
+---
+
+드롭다운이 다른 요소 아래로 깔려서 z-index를 99, 999, 9999로 올려 본 경험이 한 번쯤 있을 겁니다. 그래도 안 올라옵니다. 숫자가 작아서가 아니라, **비교하는 대상이 애초에 다르기 때문**입니다. 5편의 캐스케이드가 "어떤 스타일이 이기나"였다면, 이번 글은 "어떤 요소가 위에 그려지나"입니다.
+
+## z-index는 같은 그룹 안에서만 비교된다
+
+**쌓임 맥락(stacking context)은 요소들이 화면 앞뒤(z축) 순서를 비교하는 독립된 그룹**입니다. z-index는 **같은 쌓임 맥락 안에 있는 요소끼리만** 비교됩니다.
+
+```html
+<div class="header">헤더</div>
+<div class="card">
+  <div class="dropdown">드롭다운</div>
+</div>
+```
+
+```css
+.header   { position: relative; z-index: 10; }
+.card     { position: relative; z-index: 1; }   /* 쌓임 맥락이 생김 */
+.dropdown { position: absolute; z-index: 9999; }
+```
+
+드롭다운은 헤더 아래에 깔립니다. 비교는 이렇게 일어납니다.
+
+```
+문서 전체 (루트 쌓임 맥락)
+├ .header   z-index 10
+└ .card     z-index 1        ← 이 그룹 전체가 헤더 아래
+   └ .dropdown z-index 9999  ← 카드 그룹 안에서만 의미 있는 숫자
+```
+
+먼저 루트에서 `.header(10)`와 `.card(1)`를 비교합니다. 카드 그룹 전체가 헤더 아래로 정해지면, 그 안의 드롭다운은 9999든 99999든 **카드 그룹 밖으로 나갈 수 없습니다.** 드롭다운의 z-index는 카드 안의 다른 요소와 순서를 정할 때만 쓰입니다.
+
+그래서 z-index를 아무리 올려도 해결되지 않습니다. 고쳐야 하는 건 숫자가 아니라 **어느 그룹에 속해 있느냐**입니다.
+
+## 쌓임 맥락을 만드는 속성
+
+문제는 z-index만 쌓임 맥락을 만드는 게 아니라는 점입니다. 의도하지 않게 생기는 경우가 많습니다.
+
+| 속성 | 쌓임 맥락이 생기는 조건 |
+| --- | --- |
+| `<html>` | 문서 전체의 루트 쌓임 맥락 |
+| `position` + `z-index` | `relative`·`absolute`이면서 z-index가 `auto`가 아닐 때 |
+| `position: fixed`, `sticky` | 항상 |
+| flex·grid의 자식 | z-index가 `auto`가 아닐 때 (position이 없어도) |
+| `opacity` | 1보다 작을 때 |
+| `transform`, `filter`, `perspective` | `none`이 아닐 때 |
+| `will-change` | 위 속성들을 지정할 때 |
+| `isolation: isolate` | 항상 (쌓임 맥락만 만들려고 쓰는 속성) |
+| `mix-blend-mode`, `contain`, `backdrop-filter` | 특정 값일 때 |
+
+실무에서 가장 흔한 함정은 **애니메이션**입니다. 카드에 페이드 효과(`opacity`)나 이동 효과(`transform`)를 넣었더니, 그 안의 드롭다운이 갑자기 다른 요소 아래로 깔립니다. z-index를 하나도 바꾸지 않았는데 쌓임 맥락이 새로 생긴 것입니다.
+
+## 한 쌓임 맥락 안에서 그리는 순서
+
+z-index가 없는 요소들은 어떤 순서로 그려질까요? 한 쌓임 맥락 안에서 브라우저는 아래 순서로 그립니다. **뒤에 그린 것이 위에 보입니다.**
+
+1. 쌓임 맥락을 만든 요소 자신의 배경과 테두리
+2. z-index가 **음수**인 자식 (작은 값부터)
+3. position이 없는 일반 블록 요소
+4. float 요소
+5. position이 없는 인라인 요소 (글자 등)
+6. position이 있고 z-index가 `auto` 또는 `0`인 요소 (문서에 나온 순서대로)
+7. z-index가 **양수**인 자식 (작은 값부터)
+
+여기서 알 수 있는 것들이 있습니다.
+
+- **position만 주고 z-index를 안 줘도** 6단계라서 일반 요소들보다 위에 그려집니다. `position: relative`만 줬는데 요소가 위로 올라오는 이유입니다.
+- z-index가 같으면 **문서에 나중에 나온 요소**가 위입니다.
+- z-index가 **음수**면 부모의 배경보다는 위, 일반 요소들보다는 아래에 그려집니다. 단, 부모가 쌓임 맥락을 만들지 않았다면 부모의 배경 뒤로 숨어 버릴 수 있습니다.
+
+## z-index가 아예 안 먹는 경우
+
+```css
+.box { z-index: 10; }   /* position이 static이면 효과 없음 */
+```
+
+z-index는 **position이 있는 요소(relative, absolute, fixed, sticky)** 이거나 **flex·grid의 자식**일 때만 동작합니다. 일반 static 요소에 z-index를 줘도 아무 일도 일어나지 않습니다.
+
+## 해결 방법
+
+### 1. Portal로 그룹 밖에 그리기
+
+모달, 드롭다운, 토스트처럼 항상 위에 있어야 하는 요소는 **DOM 위치를 body 바로 아래로** 옮깁니다.
+
+```jsx
+import { createPortal } from "react-dom";
+
+function Dropdown({ children }) {
+  return createPortal(<div className="dropdown">{children}</div>, document.body);
+}
+```
+
+컴포넌트 코드는 카드 안에 있어도, 실제 DOM은 body 아래에 생겨서 카드의 쌓임 맥락에서 벗어납니다. 대신 위치를 직접 계산해야 하고(버튼 위치 기준), 스크롤할 때 따라가게 처리해야 합니다.
+
+### 2. dialog와 top layer
+
+`dialog.showModal()`로 연 모달이나 Popover API로 띄운 요소는 브라우저의 **top layer**라는 특별한 층에 올라갑니다. top layer는 모든 쌓임 맥락 위에 그려져서 z-index를 신경 쓸 필요가 없습니다.
+
+```js
+const dialog = document.querySelector("dialog");
+dialog.showModal();   // z-index 없이 항상 맨 위
+```
+
+### 3. isolation: isolate로 그룹을 일부러 만들기
+
+반대로 컴포넌트 안의 z-index가 **바깥에 새어 나가지 않게** 하고 싶을 때도 있습니다.
+
+```css
+.card {
+  isolation: isolate;   /* 카드 안의 z-index는 카드 안에서만 비교됨 */
+}
+```
+
+`isolation: isolate`는 다른 부작용 없이 쌓임 맥락만 만듭니다. 컴포넌트 안에서 z-index를 써도 페이지의 다른 요소와 경쟁하지 않게 됩니다.
+
+### 4. z-index를 층으로 관리하기
+
+```css
+:root {
+  --z-dropdown: 100;
+  --z-sticky-header: 200;
+  --z-modal: 300;
+  --z-toast: 400;
+}
+```
+
+숫자를 그때그때 키우지 않고 **층을 이름으로 정해 두면** 경쟁이 사라집니다. 디자인 시스템에서는 이 값을 토큰으로 둡니다.
+
+## 디버깅 순서
+
+z-index가 안 먹으면 숫자를 올리기 전에 이렇게 확인합니다.
+
+1. 이 요소에 position이 있나? (없으면 z-index가 동작하지 않음)
+2. **부모 중에** 쌓임 맥락을 만드는 속성(z-index, opacity, transform, filter 등)이 있나?
+3. 있다면 그 부모가 비교 대상(덮고 있는 요소)보다 아래 그룹인가?
+
+Chrome 개발자 도구의 **Layers 패널**(Edge는 3D View)로 보면 레이어가 어떻게 나뉘어 그려지는지 눈으로 확인할 수 있습니다.
+
+## 정리
+
+> "쌓임 맥락은 요소들이 화면 앞뒤 순서를 비교하는 독립된 그룹이고, z-index는 같은 쌓임 맥락 안에서만 비교됩니다. 부모가 z-index, opacity, transform 같은 속성으로 쌓임 맥락을 만들면 자식은 z-index가 아무리 커도 그 그룹 밖으로 올라갈 수 없습니다. 그래서 모달이나 드롭다운은 Portal로 body 아래에 그리거나 dialog의 top layer를 쓰고, 컴포넌트 안의 z-index는 isolation으로 가두며, z-index 값은 층별 토큰으로 관리합니다."
