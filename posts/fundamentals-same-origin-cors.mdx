@@ -1,0 +1,146 @@
+---
+title: "기본기 다시 다지기 (10) — 브라우저는 왜 다른 출처의 응답을 막을까"
+description: "CORS 에러가 나도 요청은 이미 서버에 도착해 있다는 사실에서 출발해, 동일 출처 정책이 막는 것과 막지 않는 것, 그 이유가 쿠키 자동 전송에 있다는 점, CORS 헤더와 preflight의 동작을 정리합니다."
+date: "2026-11-08"
+category: "auth"
+series: "기본기 다시 다지기"
+seriesOrder: 10
+order: 1
+tags: ["CORS", "동일 출처 정책", "브라우저 보안", "preflight", "기본기"]
+---
+
+프론트엔드 개발자라면 이 에러를 모르는 사람이 없을 겁니다.
+
+```text
+Access to fetch at 'https://api.example.com/users' from origin 'http://localhost:3000'
+has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present
+on the requested resource.
+```
+
+그런데 이 에러가 났을 때 서버 로그를 보면, **요청이 서버에 도착해서 처리까지 끝나 있는** 경우가 많습니다. 서버는 정상적으로 응답했는데 브라우저가 그 응답을 JavaScript에 안 넘겨준 것입니다. 이상하지 않나요? 막을 거면 요청 자체를 막지, 왜 응답만 막을까요? 이 질문에 답하면 CORS가 한 번에 이해됩니다.
+
+## 출처(origin)란
+
+**출처는 프로토콜, 호스트, 포트를 합친 것**입니다. 셋 중 하나라도 다르면 다른 출처입니다.
+
+| 비교 대상 (기준: `https://shop.com`) | 같은 출처인가 | 이유 |
+| --- | --- | --- |
+| `https://shop.com/cart` | 같음 | 경로는 상관없음 |
+| `http://shop.com` | 다름 | 프로토콜이 다름 |
+| `https://api.shop.com` | 다름 | 호스트가 다름 (서브도메인도 다름) |
+| `https://shop.com:8443` | 다름 | 포트가 다름 |
+
+로컬 개발에서 `localhost:3000`의 화면이 `localhost:8080`의 API를 부르면 포트가 달라서 **다른 출처**입니다. 같은 컴퓨터여도 CORS가 문제 되는 이유입니다.
+
+## 동일 출처 정책이 막는 것과 막지 않는 것
+
+**동일 출처 정책(Same-Origin Policy)은 한 출처의 스크립트가 다른 출처의 자원을 읽지 못하게 하는 브라우저의 보안 규칙**입니다. 핵심은 "읽기"입니다.
+
+| 막지 않는 것 (보내기·삽입) | 막는 것 (읽기) |
+| --- | --- |
+| `<img src>`로 다른 출처 이미지 표시 | 그 이미지의 픽셀을 캔버스로 읽기 |
+| `<script src>`로 다른 출처 스크립트 실행 | 다른 출처 iframe 안의 DOM 접근 |
+| `<form>`으로 다른 출처에 POST 제출 | fetch·XHR로 받은 다른 출처 응답 읽기 |
+| 다른 출처로 링크 이동 | 다른 출처의 쿠키·localStorage 읽기 |
+
+웹은 처음부터 다른 사이트의 이미지를 걸고, 다른 사이트로 폼을 보내는 구조였습니다. 동일 출처 정책은 이걸 막지 않습니다. 대신 **다른 출처에서 받은 내용을 스크립트가 꺼내 보는 것**을 막습니다. 그래서 CORS 에러가 나도 요청은 이미 서버에 가 있는 것입니다.
+
+## 왜 "읽기"를 막아야 할까: 쿠키 때문이다
+
+이 정책이 왜 필요한지는 **쿠키가 자동으로 따라간다**는 사실에서 나옵니다. 브라우저는 요청을 보낼 때, 그 요청이 **어느 사이트에서 시작됐든** 목적지 사이트의 쿠키를 붙여 보냅니다(이 규칙과 그 한계는 11편에서 자세히 다룹니다).
+
+동일 출처 정책이 없다고 가정해 봅시다.
+
+1. 사용자가 은행 사이트 `bank.com`에 로그인해 있습니다. 브라우저에 은행 세션 쿠키가 있습니다.
+2. 같은 브라우저로 악성 사이트 `evil.com`에 들어갑니다.
+3. `evil.com`의 스크립트가 `fetch("https://bank.com/api/account")`를 실행합니다.
+4. 브라우저는 은행 쿠키를 붙여 보내고, 은행은 로그인한 사용자로 보고 계좌 정보를 응답합니다.
+5. `evil.com`의 스크립트가 그 응답을 읽어서 자기 서버로 보냅니다.
+
+사용자는 아무것도 누르지 않았는데 계좌 정보가 새어 나갑니다. 동일 출처 정책은 **5번, 응답을 읽는 단계**를 막아서 이 공격을 무력화합니다.
+
+쿠키가 아니어도 위험한 경우가 있습니다. 회사 내부망의 `http://intranet.local`은 외부에서는 접근할 수 없지만, 회사 안에 있는 직원의 브라우저에서는 접근할 수 있습니다. 동일 출처 정책이 없으면 외부 사이트가 직원 브라우저를 통해 내부망 페이지를 읽어 갈 수 있습니다.
+
+## CORS: 서버가 "읽어도 된다"고 허락하는 방법
+
+그런데 실제 서비스는 다른 출처의 API를 불러야 할 때가 많습니다. `shop.com` 화면이 `api.shop.com`을 부르는 것처럼요. 그래서 **서버가 특정 출처에게 응답을 읽어도 된다고 허락하는 방법**이 생겼습니다. 이것이 **CORS(Cross-Origin Resource Sharing)** 입니다.
+
+동작은 간단합니다.
+
+1. 브라우저가 요청에 `Origin` 헤더를 붙입니다. "이 요청은 `https://shop.com`에서 시작됐다."
+2. 서버가 응답에 `Access-Control-Allow-Origin` 헤더를 붙입니다. "`https://shop.com`은 이 응답을 읽어도 된다."
+3. 브라우저는 두 값이 맞으면 응답을 스크립트에 넘겨주고, 아니면 막습니다.
+
+```text
+요청: Origin: https://shop.com
+응답: Access-Control-Allow-Origin: https://shop.com   ← 이게 없거나 다르면 CORS 에러
+```
+
+여기서 중요한 점이 있습니다. **CORS는 서버를 보호하는 장치가 아닙니다.** 결정은 서버가 내리지만, 지키는 쪽은 브라우저입니다. curl이나 서버끼리의 요청은 CORS 헤더를 아예 보지 않습니다. CORS는 **사용자의 브라우저 안에서, 사용자의 쿠키로, 다른 사이트가 데이터를 읽어 가는 걸 막기 위한** 장치입니다. 그래서 API의 인증·권한 검사는 CORS와 상관없이 서버가 따로 해야 합니다.
+
+## preflight: 위험할 수 있는 요청은 먼저 물어본다
+
+앞에서 "요청은 이미 서버에 가 있다"고 했는데, 항상 그런 건 아닙니다. 동일 출처 정책이 생기기 전부터 `<form>`으로 보낼 수 있던 요청과 비슷한 **단순한 요청**만 바로 보냅니다. 그 밖의 요청은 보내기 전에 **먼저 서버에 물어봅니다.** 이걸 **preflight(사전 요청)** 라고 합니다.
+
+### 바로 보내는 단순 요청의 조건
+
+아래를 **모두** 만족해야 preflight 없이 바로 갑니다.
+
+- 메서드가 `GET`, `HEAD`, `POST` 중 하나
+- 직접 붙인 헤더가 `Accept`, `Accept-Language`, `Content-Language`, `Content-Type` 정도뿐
+- `Content-Type`이 `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain` 중 하나
+
+실무 API 요청은 대부분 이 조건을 벗어납니다. `Content-Type: application/json`이나 `Authorization` 헤더를 쓰는 순간 preflight가 생깁니다.
+
+### preflight 흐름
+
+```text
+1) 브라우저 → 서버 (OPTIONS, 본 요청 전에)
+   Origin: https://shop.com
+   Access-Control-Request-Method: PUT
+   Access-Control-Request-Headers: content-type, authorization
+
+2) 서버 → 브라우저
+   Access-Control-Allow-Origin: https://shop.com
+   Access-Control-Allow-Methods: GET, POST, PUT
+   Access-Control-Allow-Headers: content-type, authorization
+   Access-Control-Max-Age: 600          ← 10분 동안 이 결과를 재사용
+
+3) 허락됐으면 그제야 본 요청(PUT)을 보냄
+```
+
+preflight가 있는 이유는, 옛날 서버들은 "다른 출처에서 PUT이나 DELETE, JSON 요청이 올 리 없다"고 가정하고 만들어졌기 때문입니다. 그런 서버를 지키려고, 새로 가능해진 종류의 요청은 **서버가 명시적으로 허락했을 때만** 보내도록 한 것입니다. 단순 요청은 원래 form으로도 보낼 수 있었으니 새로 위험해질 게 없어서 그냥 보냅니다.
+
+## 쿠키까지 보내려면
+
+다른 출처 요청에는 기본적으로 쿠키가 붙지 않습니다. 쿠키를 보내려면 양쪽이 모두 동의해야 합니다.
+
+```js
+fetch("https://api.shop.com/me", { credentials: "include" });
+```
+
+```text
+Access-Control-Allow-Origin: https://shop.com    ← * 불가, 정확한 출처
+Access-Control-Allow-Credentials: true
+```
+
+쿠키를 포함할 때는 `Access-Control-Allow-Origin: *`(모든 출처 허용)를 쓸 수 없습니다. 아무 사이트나 사용자의 쿠키로 응답을 읽게 허락하는 건 동일 출처 정책을 통째로 없애는 것과 같기 때문입니다.
+
+### 흔한 보안 실수
+
+```text
+요청의 Origin 값을 그대로 Access-Control-Allow-Origin에 복사 + Allow-Credentials: true
+```
+
+"모든 출처를 허용하되 쿠키도 받고 싶어서" 이렇게 설정하면, `*`를 막아 둔 의미가 사라집니다. `evil.com`에서 요청해도 `evil.com`을 허락해 주니까요. 허용할 출처는 **목록으로 정해 두고, 목록에 있을 때만** 응답 헤더에 넣습니다. 출처마다 응답이 달라지므로 `Vary: Origin` 헤더도 함께 보내서 CDN이 다른 출처의 응답을 섞어 캐시하지 않게 합니다.
+
+## CORS 에러를 만났을 때
+
+1. **개발자 도구 Network 탭에서 OPTIONS 요청이 있는지** 봅니다. preflight가 실패했는지, 본 요청의 응답에 헤더가 없는지에 따라 고칠 곳이 다릅니다.
+2. **서버에서 고칩니다.** CORS는 서버가 응답 헤더로 허락하는 구조라, 프론트엔드 코드로는 해결할 수 없습니다. `mode: "no-cors"`는 에러를 없애는 대신 응답을 **아예 읽을 수 없게(opaque)** 만들 뿐이라 해결책이 아닙니다.
+3. **개발 환경에서는 프록시를 씁니다.** Vite의 `server.proxy`나 Next.js의 rewrites로 같은 출처 주소로 요청하면, 개발 서버가 대신 API 서버에 요청합니다. 서버끼리의 요청에는 동일 출처 정책이 없어서 CORS 문제가 생기지 않습니다.
+4. **에러 메시지의 상태 코드를 믿지 않습니다.** CORS로 막힌 응답은 JavaScript에서 상태 코드도 볼 수 없습니다. 실제로 500이었는지 401이었는지는 Network 탭에서 확인합니다.
+
+## 정리
+
+> "동일 출처 정책은 한 출처의 스크립트가 다른 출처의 응답을 읽지 못하게 하는 브라우저 규칙입니다. 브라우저가 요청마다 목적지의 쿠키를 자동으로 붙이기 때문에, 이 규칙이 없으면 악성 사이트가 로그인된 사용자의 쿠키로 다른 사이트 데이터를 읽어 갈 수 있습니다. 그래서 보내기는 막지 않고 읽기를 막습니다. CORS는 서버가 Access-Control-Allow-Origin 헤더로 특정 출처에 읽기를 허락하는 방법이고, JSON이나 Authorization 헤더처럼 form으로 보낼 수 없던 요청은 preflight로 먼저 허락을 받습니다. CORS는 브라우저가 지키는 규칙이라 서버 보안을 대신하지 않습니다."
