@@ -1,0 +1,178 @@
+---
+title: "기본기 다시 다지기 (16) — ref 값을 바꿨는데 왜 화면은 다시 그려지지 않을까"
+description: "지역 변수, state, ref가 각각 렌더 사이에 값을 기억하는지와 바뀌면 다시 렌더하는지를 비교하고, useRef가 렌더마다 같은 객체를 돌려주는 원리, 렌더 중에 ref를 읽고 쓰면 안 되는 이유, DOM ref와 React 19의 ref 변화까지 정리합니다."
+date: "2026-11-15"
+category: "react"
+series: "기본기 다시 다지기"
+seriesOrder: 16
+order: 3
+tags: ["React", "useRef", "useState", "렌더링", "기본기"]
+---
+
+state를 쓰면 리렌더가 일어나니까 성능을 아끼려고 ref를 쓴 코드입니다.
+
+```jsx
+function LikeButton() {
+  const likes = useRef(0);
+
+  return (
+    <button onClick={() => (likes.current += 1)}>
+      좋아요 {likes.current}
+    </button>
+  );
+}
+```
+
+버튼을 아무리 눌러도 화면은 계속 "좋아요 0"입니다. 그런데 다른 state가 바뀌어 리렌더가 일어나는 순간, 갑자기 "좋아요 5"로 바뀝니다. 값은 분명히 늘어나고 있었는데 화면만 따라오지 않은 겁니다. 왜 그럴까요?
+
+## 컴포넌트가 값을 기억하는 세 가지 방법
+
+7편에서 컴포넌트는 **렌더마다 새로 호출되는 함수**라고 했습니다. 이 관점에서 값을 담는 방법 세 가지를 비교하면 ref의 자리가 분명해집니다.
+
+| 방법 | 렌더 사이에 값을 기억하나 | 바꾸면 다시 렌더하나 | 언제 쓰나 |
+| --- | --- | --- | --- |
+| 지역 변수 (`let x`) | 아니요. 렌더마다 새로 만들어짐 | 아니요 | 렌더 안에서만 쓰는 계산 값 |
+| state (`useState`) | 예 | **예** | 화면에 보여야 하는 값 |
+| ref (`useRef`) | 예 | **아니요** | 화면과 상관없이 기억만 해 둘 값 |
+
+ref는 **"기억은 하지만, 바뀌었다고 React에 알리지 않는 값"** 입니다. 처음 코드에서 `likes.current`는 실제로 늘어나고 있었습니다. 다만 React가 그 사실을 모르니 다시 렌더하지 않았고, 화면은 마지막 렌더 때 읽은 0에 머물러 있었던 것입니다. 다른 이유로 리렌더가 일어나야 그제야 현재 값을 읽어 화면에 반영합니다.
+
+화면에 보여야 하는 값이라면 state를 써야 합니다.
+
+```jsx
+const [likes, setLikes] = useState(0);
+<button onClick={() => setLikes((n) => n + 1)}>좋아요 {likes}</button>
+```
+
+## useRef는 렌더마다 같은 객체를 돌려준다
+
+`useRef`가 하는 일은 단순합니다. 첫 렌더에 `{ current: 초깃값 }` 객체를 만들어 8편의 Hook 칸에 저장하고, **이후 렌더에서는 그 객체를 그대로** 돌려줍니다. `setState`처럼 다시 렌더를 예약하는 장치가 없습니다. 작은 런타임으로 확인해 봅시다.
+
+```js
+const slots = [];
+let index = 0;
+let renders = 0;
+
+function useRef(initialValue) {
+  const i = index++;
+  if (!(i in slots)) slots[i] = { current: initialValue };   // 첫 렌더에만 객체를 만듦
+  return slots[i];                                           // 이후에는 같은 객체
+}
+
+function useState(initialValue) {
+  const i = index++;
+  if (!(i in slots)) slots[i] = initialValue;
+  const setState = (next) => {
+    slots[i] = next;
+    render();   // 바꾸면 다시 렌더
+  };
+  return [slots[i], setState];
+}
+
+let firstRef;
+let ui;
+
+function Component() {
+  renders++;
+  const clicks = useRef(0);
+  const [count, setCount] = useState(0);
+  firstRef ??= clicks;
+  return { clicks, count, setCount, sameRef: firstRef === clicks };
+}
+
+function render() {
+  index = 0;
+  ui = Component();
+}
+
+render();
+ui.clicks.current += 1;   // ref를 바꿔도
+console.log(renders, ui.clicks.current); // 1 1
+
+ui.setCount(ui.count + 1);   // state를 바꾸면 다시 렌더
+console.log(renders, ui.count, ui.clicks.current, ui.sameRef); // 2 1 1 true
+```
+
+ref를 바꿨을 때는 렌더 횟수가 그대로 1이고, state를 바꾸자 2가 됐습니다. 두 번째 렌더에서도 `clicks`는 **첫 렌더와 같은 객체**(`true`)라서 값 1이 유지됩니다. 1편에서 본 것처럼 객체는 참조로 전달되니, 어느 렌더에서 꺼내도 같은 상자를 들여다보는 셈입니다.
+
+이 성질 덕분에 ref는 7편의 "스냅샷" 규칙에서 벗어납니다. state는 렌더마다 고정된 값이지만, ref는 **모든 렌더가 공유하는 하나의 상자**라서 언제 읽어도 마지막에 넣은 값이 나옵니다.
+
+## 렌더 중에는 ref를 읽거나 쓰지 않는다
+
+그렇다면 처음 코드처럼 JSX에서 `likes.current`를 읽는 게 왜 문제일까요? React는 컴포넌트를 **같은 입력이면 같은 결과를 내는 순수한 함수**로 다룹니다. 그래서 렌더를 여러 번 하거나, 하다가 버리거나, 미뤘다가 다시 해도 결과가 같다고 가정합니다.
+
+- **동시성 렌더링:** `useTransition` 같은 기능은 렌더를 중간에 멈추고 다시 시작할 수 있습니다. 렌더 중에 ref를 바꾸면 버려진 렌더의 흔적이 남습니다.
+- **Strict Mode:** 개발 모드에서는 일부러 컴포넌트를 두 번 호출해서 순수하지 않은 코드를 드러냅니다. 렌더 중에 ref를 바꾸는 코드가 있으면 이때 결과가 어긋나기 쉽습니다.
+- **React Compiler:** 렌더 결과를 메모이제이션하므로, 렌더 중에 읽은 ref 값이 바뀌어도 화면이 갱신되지 않을 수 있습니다.
+
+그래서 ref는 **이벤트 핸들러와 Effect 안에서** 읽고 씁니다. 예외는 무거운 객체를 한 번만 만드는 지연 초기화 하나입니다.
+
+```jsx
+const playerRef = useRef(null);
+if (playerRef.current === null) {
+  playerRef.current = new VideoPlayer();   // 첫 렌더에서만 실행되고 결과가 항상 같음
+}
+```
+
+## ref가 어울리는 곳
+
+화면에 보이지 않고, 바뀌어도 다시 그릴 필요가 없는 값들입니다.
+
+| 용도 | 예 |
+| --- | --- |
+| DOM 요소 | 입력칸에 포커스, 스크롤 위치 조절, 요소 크기 측정 |
+| 타이머·구독 id | `setInterval`의 id를 저장했다가 정지 버튼에서 `clearInterval` |
+| 진행 중인 작업 | 14편의 `AbortController`를 저장했다가 새 요청 전에 취소 |
+| 외부 라이브러리 인스턴스 | 지도, 차트, 에디터 객체 |
+
+```jsx
+function Stopwatch() {
+  const [elapsed, setElapsed] = useState(0);   // 화면에 보임 → state
+  const intervalRef = useRef(null);           // 화면에 안 보임 → ref
+
+  function start() {
+    intervalRef.current = setInterval(() => setElapsed((t) => t + 1), 1000);
+  }
+
+  function stop() {
+    clearInterval(intervalRef.current);
+  }
+
+  return (
+    <>
+      <p>{elapsed}초</p>
+      <button onClick={start}>시작</button>
+      <button onClick={stop}>정지</button>
+    </>
+  );
+}
+```
+
+interval id를 state에 두면 저장할 때마다 쓸데없이 다시 렌더하고, 지역 변수에 두면 다음 렌더에서 사라져 `stop`이 지울 id를 잃어버립니다. ref가 딱 맞는 자리입니다.
+
+## DOM ref는 언제 채워지나
+
+`<input ref={inputRef} />`처럼 쓰면 React가 DOM 요소를 `inputRef.current`에 넣어 줍니다. 이 시점은 **렌더가 아니라 커밋(DOM에 반영할 때)** 입니다. 그래서 첫 렌더 중에는 아직 `null`이고, Effect나 이벤트 핸들러에서 써야 요소가 들어 있습니다. 렌더 중에 ref를 읽으면 안 되는 또 하나의 이유입니다.
+
+React 19에서 ref는 두 가지가 편해졌습니다.
+
+- **ref를 props로 받을 수 있습니다.** 함수 컴포넌트가 `function Input({ ref }) {...}`처럼 받으면 되고, `forwardRef`가 필요 없습니다.
+- **콜백 ref가 cleanup 함수를 돌려줄 수 있습니다.** 요소가 사라질 때 그 함수가 불려서, 요소에 붙인 관찰자나 리스너를 정리하기 좋습니다.
+
+```jsx
+<div
+  ref={(node) => {
+    const observer = new ResizeObserver(() => {/* 크기 변경 처리 */});
+    observer.observe(node);
+    return () => observer.disconnect();   // 요소가 사라질 때 실행
+  }}
+/>
+```
+
+## "최신 값을 읽으려고 ref에 복사하기"는 마지막 수단
+
+Effect나 오래 사는 콜백에서 최신 props를 읽으려고, 렌더마다 ref에 값을 복사하는 패턴이 자주 쓰였습니다. 12편에서 본 `useEffectEvent`가 바로 이 용도를 위해 생겼습니다. Effect 안에서 최신 값을 읽기만 하고 싶다면 `useEffectEvent`를 먼저 고려합니다.
+
+## 정리
+
+> "ref는 렌더 사이에 값을 기억하지만, 바뀌어도 React에 알리지 않아서 다시 렌더하지 않는 값입니다. useRef는 첫 렌더에 { current } 객체를 만들어 Hook 칸에 저장하고 이후 렌더에서 같은 객체를 돌려주므로, 모든 렌더가 하나의 상자를 공유합니다. 그래서 ref.current를 바꿔도 화면은 그대로이고, 화면에 보여야 하는 값은 state에 둡니다. 렌더는 여러 번 실행되거나 버려질 수 있는 순수한 계산이어야 하므로 ref는 지연 초기화를 빼고는 이벤트 핸들러와 Effect 안에서만 읽고 쓰며, DOM 요소, 타이머 id, 취소용 컨트롤러처럼 화면에 보이지 않는 값을 담는 데 씁니다."

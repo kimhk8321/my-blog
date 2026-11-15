@@ -1,0 +1,160 @@
+---
+title: "기본기 다시 다지기 (19) — 버튼을 눌렀는데 왜 카드의 클릭 이벤트까지 실행될까"
+description: "이벤트가 캡처, 타깃, 버블 세 단계로 전파되는 원리에서 출발해, stopPropagation과 preventDefault의 차이, 이벤트 위임과 target·currentTarget, 버블링하지 않는 이벤트, React의 루트 위임과 포털에서의 전파까지 정리합니다."
+date: "2026-11-15"
+category: "javascript"
+series: "기본기 다시 다지기"
+seriesOrder: 19
+order: 6
+tags: ["이벤트", "버블링", "이벤트 위임", "DOM", "기본기"]
+---
+
+상품 카드 전체를 누르면 상세 페이지로 가고, 카드 안의 하트 버튼을 누르면 찜하기가 되는 화면을 만들었습니다.
+
+```jsx
+<div className="card" onClick={() => router.push(`/products/${id}`)}>
+  <img src={image} alt="" />
+  <button onClick={() => toggleWish(id)}>♡</button>
+</div>
+```
+
+하트를 누르니 찜은 되는데, **동시에 상세 페이지로 넘어가 버립니다.** 버튼의 핸들러만 실행돼야 할 것 같은데 왜 카드의 핸들러까지 실행될까요?
+
+## 이벤트는 세 단계를 거쳐 전파된다
+
+클릭은 버튼 하나에서만 일어나는 일이 아닙니다. 버튼은 카드 안에 있고, 카드는 `body` 안에, `body`는 `html` 안에 있습니다. 버튼을 누른 건 **그 조상들 위를 누른 것**이기도 합니다. 그래서 브라우저는 이벤트를 조상들에게도 전달합니다. 그 경로는 세 단계입니다.
+
+```text
+          window
+            │  ① 캡처 단계: 위에서 아래로 내려감
+          document
+            │
+           body
+            │
+          div.card
+            │
+          button  ② 타깃 단계: 실제로 누른 요소
+            │
+          div.card
+            │  ③ 버블 단계: 아래에서 위로 올라감
+           body …  window
+```
+
+`addEventListener`는 기본으로 **버블 단계**에서 실행됩니다. 그래서 버튼의 핸들러가 먼저 실행되고, 이벤트가 위로 올라가면서 카드의 핸들러도 실행됩니다. 거품(bubble)이 위로 올라가는 모습에서 **버블링**이라는 이름이 붙었습니다. 캡처 단계에서 실행하고 싶으면 옵션을 줍니다.
+
+```html
+<div id="card">
+  <button id="like">♡</button>
+</div>
+<script>
+  const card = document.getElementById("card");
+  const like = document.getElementById("like");
+
+  card.addEventListener("click", () => console.log("카드 캡처"), { capture: true });
+  card.addEventListener("click", () => console.log("카드 버블"));
+  like.addEventListener("click", () => console.log("버튼"));
+
+  // 버튼 클릭 시 출력 순서: 카드 캡처 → 버튼 → 카드 버블
+</script>
+```
+
+## target과 currentTarget
+
+이벤트가 여러 요소를 지나가니, 핸들러 안에서는 두 가지를 구분해야 합니다.
+
+| 속성 | 가리키는 것 | 위 예에서 카드 핸들러가 볼 때 |
+| --- | --- | --- |
+| `event.target` | 실제로 누른 요소 (전파되는 동안 그대로) | `button` |
+| `event.currentTarget` | 지금 실행 중인 핸들러가 붙은 요소 | `div.card` |
+
+버튼 안에 아이콘 `<svg>`가 있다면 `target`은 버튼이 아니라 `svg`일 수도 있습니다. `target`을 쓸 때는 이 점을 주의해야 합니다.
+
+## 전파를 멈추는 법, 기본 동작을 막는 법
+
+처음 문제는 버튼 핸들러에서 전파를 멈추면 해결됩니다.
+
+```jsx
+<button
+  onClick={(e) => {
+    e.stopPropagation();   // 더 이상 위로 올라가지 않음
+    toggleWish(id);
+  }}
+>
+  ♡
+</button>
+```
+
+여기서 자주 헷갈리는 짝이 `preventDefault`입니다. 둘은 전혀 다른 일을 합니다.
+
+| 메서드 | 하는 일 | 예 |
+| --- | --- | --- |
+| `stopPropagation()` | 이벤트가 **다른 요소로** 전파되는 것을 멈춤 | 버튼 클릭이 카드로 올라가지 않게 |
+| `preventDefault()` | 브라우저의 **기본 동작**을 취소. 전파는 계속됨 | 링크 이동, 폼 제출, 체크박스 체크 막기 |
+| `stopImmediatePropagation()` | 전파를 멈추고, 같은 요소의 다른 핸들러도 실행하지 않음 | 드묾 |
+
+카드가 `<a>` 링크였다면 `stopPropagation`만으로는 이동이 막히지 않습니다. 링크 이동은 전파가 아니라 `<a>`의 **기본 동작**이니까요. 이때는 `preventDefault`가 필요합니다.
+
+### stopPropagation은 조심해서 쓴다
+
+전파를 멈추면 **위에서 듣고 있던 다른 코드도 그 이벤트를 못 받습니다.** 대표적인 피해자가 "바깥을 클릭하면 닫히는 드롭다운"입니다. 이런 컴포넌트는 보통 `document`에 클릭 리스너를 걸어 두는데, 어딘가에서 `stopPropagation`을 하면 그 클릭은 `document`까지 오지 않아 드롭다운이 안 닫힙니다. 분석 도구의 클릭 수집도 같은 이유로 빠집니다.
+
+그래서 전파를 끊기보다, **위쪽 핸들러가 스스로 판단하게** 하는 방법이 더 안전할 때가 많습니다.
+
+```jsx
+<div
+  className="card"
+  onClick={(e) => {
+    if (e.target.closest("button, a")) return;   // 안쪽의 버튼·링크 클릭은 무시
+    router.push(`/products/${id}`);
+  }}
+>
+```
+
+더 근본적으로는 구조를 바꾸는 방법도 있습니다. 카드 전체를 `<a>`로 감싸고 그 안에 `<button>`을 넣으면, 인터랙티브 요소가 중첩되어 HTML 규칙에도 어긋나고 키보드·스크린 리더 사용자도 혼란스러워합니다. 제목만 링크로 두고, CSS로 링크의 클릭 영역을 카드 전체로 넓힌 뒤 버튼을 그 위에 올리는 방식이 자주 쓰입니다.
+
+## 버블링 덕분에 가능한 것: 이벤트 위임
+
+버블링은 문제만 만드는 게 아닙니다. 이벤트가 위로 올라오니, **부모 하나에 리스너를 걸어 자식 전체의 이벤트를 처리**할 수 있습니다. 이걸 **이벤트 위임**이라고 합니다.
+
+```html
+<ul id="todo-list">
+  <li data-id="1">장보기 <button data-action="delete">삭제</button></li>
+  <li data-id="2">운동 <button data-action="delete">삭제</button></li>
+</ul>
+<script>
+  document.getElementById("todo-list").addEventListener("click", (e) => {
+    const button = e.target.closest("[data-action='delete']");
+    if (!button) return;
+    const id = button.closest("li").dataset.id;
+    removeTodo(id);
+  });
+</script>
+```
+
+항목이 1,000개여도 리스너는 하나이고, 나중에 추가된 `<li>`도 따로 리스너를 붙이지 않아도 동작합니다. `target` 대신 `closest`로 찾는 이유는, 버튼 안의 아이콘을 눌러도 버튼을 찾을 수 있게 하기 위해서입니다.
+
+## 버블링하지 않는 이벤트
+
+모든 이벤트가 올라오지는 않습니다. 위임하려다 동작하지 않으면 이 목록을 확인합니다.
+
+| 버블링하지 않음 | 대신 쓸 수 있는 것 |
+| --- | --- |
+| `focus`, `blur` | `focusin`, `focusout` (버블링함) |
+| `mouseenter`, `mouseleave` | `mouseover`, `mouseout` (버블링함) |
+| 요소의 `scroll` | 캡처 단계에서 듣기 |
+| `load`, `error` (이미지 등) | 캡처 단계에서 듣기 |
+
+버블링하지 않는 이벤트도 **캡처 단계는 거칩니다.** 그래서 `{ capture: true }`로 부모에서 들으면 위임처럼 쓸 수 있습니다.
+
+## React에서는 조금 다르다
+
+React의 `onClick`도 버블링합니다. 처음 예제에서 카드 핸들러가 실행된 것도 그래서입니다. 다만 동작 방식에 알아 둘 차이가 있습니다.
+
+- **React 자체가 이벤트 위임입니다.** React는 요소마다 리스너를 붙이지 않고, React 17부터는 앱을 마운트한 **루트 요소에 리스너를 걸어** 모든 이벤트를 받은 뒤, 컴포넌트 트리를 따라 `onClick`들을 순서대로 실행합니다. 캡처 단계는 `onClickCapture`로 씁니다.
+- **네이티브 리스너와 순서가 섞일 수 있습니다.** 안쪽 요소에 `addEventListener`로 직접 붙인 리스너는, 이벤트가 루트까지 올라오기 전에 실행되므로 React 핸들러보다 **먼저** 실행됩니다.
+- **포털은 DOM이 아니라 React 트리를 따라 버블링합니다.** `createPortal`로 모달을 `body` 아래에 그려도, 모달 안의 클릭은 **모달을 렌더한 부모 컴포넌트**의 `onClick`까지 올라갑니다. 카드 안에서 띄운 모달을 클릭했는데 카드가 클릭되는 버그가 이것입니다.
+- **`onScroll`은 버블링하지 않습니다.** React 17부터 브라우저 동작에 맞췄습니다.
+
+## 정리
+
+> "이벤트는 window에서 대상 요소까지 내려가는 캡처 단계, 대상 요소의 타깃 단계, 다시 window까지 올라가는 버블 단계를 거치고, addEventListener와 React의 onClick은 기본으로 버블 단계에서 실행됩니다. 그래서 버튼을 누르면 버튼 핸들러 다음에 조상인 카드의 핸들러도 실행됩니다. stopPropagation은 다른 요소로의 전파를 멈추고, preventDefault는 링크 이동 같은 기본 동작을 막는 것으로 서로 다릅니다. 전파를 끊으면 document에서 듣는 바깥 클릭 감지 같은 코드도 이벤트를 못 받으므로, 위쪽 핸들러에서 event.target.closest로 판단하는 편이 안전할 때가 많습니다. 버블링 덕분에 부모 하나에서 자식들의 이벤트를 처리하는 이벤트 위임이 가능하고, React도 루트에서 이벤트를 위임받아 처리하며, 포털의 이벤트는 DOM이 아니라 React 트리를 따라 버블링합니다."
